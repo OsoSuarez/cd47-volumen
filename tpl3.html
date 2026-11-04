@@ -314,6 +314,7 @@ table.cmp td.hi{color:var(--yellow2)}
       <button class="btn y" id="mmCopy">Copiar detalle</button>
     </div>
     <div class="tbl" style="max-height:620px"><table id="mmDet"></table></div>
+    <div class="toolbar" style="margin-top:8px;justify-content:center"><button class="btn" id="mmMore" style="display:none"></button></div>
     <div class="note" id="mmNote"></div>
   </div>
 </div>
@@ -722,6 +723,7 @@ let qt;$('#q').oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{q=e.target.value;
 let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>agg&&renderAll(),150)});
 // ---------- Mín / Máx picking (solapa V L) ----------
 let mm=null,mmRows=[];
+let mmShow=300;
 const f0=v=>isNaN(v)?'—':nf.format(Math.round(v));
 const rn=v=>isNaN(v)?'':Math.round(v);
 function splitCSV(line,d){const out=[];let cur='',q=false;for(let i=0;i<line.length;i++){const c=line[i];if(q){if(c==='"'){if(line[i+1]==='"'){cur+='"';i++}else q=false}else cur+=c}else if(c==='"')q=true;else if(c===d){out.push(cur);cur=''}else cur+=c}out.push(cur);return out}
@@ -866,11 +868,12 @@ function renderMM(){
   const fl=$('#mmFlujo').value;
   const list=rows.filter(r=>(fl==='all'||r.flujo===fl)&&(!qq||String(r.s).includes(qq)||r.name.toLowerCase().includes(qq))&&(fv==='all'||(fv==='dem'&&r.hasDem)||(fv==='sin'&&!r.hasDem)||(fv==='corto'&&r.hasDem&&r.pico>r.max)))
     .sort((a,b)=>stat(a)-stat(b)||b.over-a.over||(a.max-a.pico)-(b.max-b.pico));
-  mmRows=list;const lim=Math.min(list.length,8000);
+  mmRows=list;const lim=Math.min(list.length,mmShow);
   let h='<thead><tr><th class="l">SKU ID</th><th class="l">SKU Name</th><th class="l">Grupo</th><th class="l">Área</th><th class="l">Flujo</th><th class="l">Temp.</th><th>Batch (plan)</th><th>Cant. empaque (V L)</th><th>Min actual</th><th>Max actual</th><th>Demanda prom./día</th><th>Pico diario</th><th>Stock picking</th><th>DOI actual</th><th>Holgura (Max − Pico)</th><th>Días sobre Max</th><th class="l">Estado</th><th class="l">Política</th><th>Min propuesto</th><th>Max propuesto</th><th class="tc">Min = Max</th></tr></thead><tbody>';
   for(let i=0;i<lim;i++){const r=list[i],st=stat(r);const col=st===0?'#ff9d97':st===1?'#9fe0a8':'#8ec5ff';const lab=st===0?'✖ Corto':st===1?'✔ OK':'○ Sin demanda';
     h+=`<tr><td class="l mono">${r.s}</td><td class="l nm" title="${esc(r.name)}">${esc(r.name)}</td><td class="tc">${esc(r.grp)}</td><td class="l">${esc(r.area)}</td><td class="l">${esc(r.flujo)}</td><td class="tc">${tSt(r.temp)[1]} ${esc(r.temp)}</td><td>${f0(r.batch)}</td><td>${f0(r.emp)}</td><td>${f0(r.min)}</td><td>${f0(r.max)}</td><td>${r.hasDem?nf1.format(r.prom):'—'}</td><td>${r.hasDem?f0(r.pico):'—'}</td><td>${f0(r.stk)}</td><td>${r.doiA==null?'—':nf1.format(r.doiA)}</td><td style="color:${st===0?'#ff9d97':'inherit'}">${r.hasDem?f0(r.max-r.pico):'—'}</td><td class="${r.over?'hi':''}">${r.hasDem?r.over:'—'}</td><td class="l" style="color:${col}">${lab}</td><td class="l">${esc(r.pol)}</td><td>${f0(r.minP)}</td><td>${f0(r.maxP)}</td><td class="tc" style="color:#ffd34d">${r.minEqMax?'⚠':''}</td></tr>`}
   DT.innerHTML=h+'</tbody>';
+  const MO=$('#mmMore');const rest=list.length-lim;MO.style.display=rest>0?'':'none';MO.textContent=`Mostrar ${nf.format(Math.min(300,rest))} más (quedan ${nf.format(rest)})`;
   NT.textContent='Universo = SKUs de la V L con grupo (sin "SIN GRUPO" ni vacíos). Demanda = unidades de todas las tiendas por SKU y día, en días con datos de su temperatura. Corto = pico mayor al Max actual de la V L. Propuestas: Min y Max redondeados hacia arriba al batch, Max por política de días del grupo. El simulador de reabastos usa estos Min/Max propuestos.'+(list.length>lim?` Mostrando ${lim} de ${list.length} (Copiar incluye todos).`:'');
 }
 const fi2=$('#fi2');fi2.onchange=()=>{if(fi2.files[0])loadMM(fi2.files[0]);fi2.value=''};
@@ -878,13 +881,14 @@ const drop2=$('#drop2');
 ['dragenter','dragover'].forEach(ev=>drop2.addEventListener(ev,e=>{e.preventDefault();drop2.classList.add('over')}));
 ['dragleave','drop'].forEach(ev=>drop2.addEventListener(ev,e=>{e.preventDefault();drop2.classList.remove('over')}));
 drop2.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)loadMM(f)});
-$('#mmQ').oninput=()=>renderMM();
-$('#mmF').onchange=()=>renderMM();
+$('#mmQ').oninput=()=>{mmShow=300;renderMM()};
+$('#mmMore').onclick=()=>{mmShow+=300;renderMM()};
+$('#mmF').onchange=()=>{mmShow=300;renderMM()};
 $('#areaBox').oninput=e=>{const a=e.target.dataset.area;if(!a)return;const v=parseFloat(e.target.value);if(v>0)DOI_AREA[a]=v;else delete DOI_AREA[a];refreshApl();renderMM();renderSim()};
 $('#areaBox').onclick=e=>{const a=e.target.dataset.heredar;if(!a)return;for(const k in GROUPS)if(GROUPS[k].area===a)delete DOI_GRP[k];renderPolicy();renderMM();renderSim()};
 $('#grpBox').oninput=e=>{const k=e.target.dataset.gdoi;if(!k)return;const v=parseFloat(e.target.value);if(v>0)DOI_GRP[k]=v;else delete DOI_GRP[k];refreshApl();renderMM();renderSim()};
 $('#grpBox').onchange=e=>{const k=e.target.dataset.garea;if(!k)return;GROUPS[k].area=e.target.value;renderPolicy();renderMM();renderSim()};
-$('#mmFlujo').onchange=()=>renderMM();
+$('#mmFlujo').onchange=()=>{mmShow=300;renderMM()};
 $('#capTbl').onchange=e=>{const d=e.target.dataset.pers;if(!d)return;const v=parseFloat(e.target.value);PERS[d]=isNaN(v)?null:v;renderAll()};
 $('#cProd').oninput=()=>{capCfg.prod=parseFloat($('#cProd').value)||0;renderAll()};
 $('#cHH').oninput=()=>{capCfg.hh=parseFloat($('#cHH').value)||0;renderAll()};
