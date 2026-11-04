@@ -89,6 +89,21 @@ for u, s in occ.items():
     if s > 0:
         F[pool(picks[u])] += 1
 
+# 2b) Almacenamiento (Area = almacenamiento) y cruce sync_id -> SKU para la solapa de reabasto
+ALM, SYNC = defaultdict(float), {}
+isync, ia2 = col(H, 'sync_id'), ia
+for r in rows:
+    sku = int(re.sub(r'\D', '', get(r, ie)) or 0)
+    if not sku:
+        continue
+    sal = pnum(get(r, isa))
+    if sal is not None and get(r, ia2).strip().lower() == 'almacenamiento':
+        ALM[sku] += sal
+    sy = re.sub(r'\D', '', get(r, isync))
+    if sy and int(sy) not in SYNC:
+        SYNC[int(sy)] = sku
+print('ALM SKUs: %d · cruce sync->SKU: %d' % (len(ALM), len(SYNC)))
+
 # 3) Grupos de la plantilla y ocupación por grupo
 tpl = open(os.path.join(HERE, 'tpl3.html'), encoding='utf-8').read()
 tpl = tpl.replace('<input type="password" id="gsKey"', '<input type="hidden" id="gsKey"', 1)
@@ -118,6 +133,9 @@ stk_out = {str(k): (int(v) if float(v).is_integer() else v) for k, v in STK.item
 tpl = patch(tpl, 'STK', stk_out)
 tpl = patch(tpl, 'OCC', OCC)
 tpl = patch(tpl, 'OCUP', OCUP)
+alm_out = {str(k): (int(v) if float(v).is_integer() else v) for k, v in ALM.items() if v > 0}
+tpl = patch(tpl, 'ALM', alm_out)
+tpl = patch(tpl, 'SYNC', {str(k): v for k, v in SYNC.items()})
 tpl, n = re.subn(r'id="invFecha" value="\d{4}-\d{2}-\d{2}"', 'id="invFecha" value="%s"' % FECHA, tpl, count=1)
 if n != 1:
     sys.exit('No encontré el campo de fecha')
