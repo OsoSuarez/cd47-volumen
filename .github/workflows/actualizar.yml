@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: '15 11 * * *'   # 08:15 hora de Buenos Aires
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tpl3.html'
+      - 'recalc.py'
+      - 'fetch_sheets.py'
+      - 'base.json'
+      - 'vl.json'
+      - '.github/workflows/actualizar.yml'
 
 permissions:
   contents: read
