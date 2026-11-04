@@ -5,7 +5,7 @@ KEY = os.environ.get('GS_KEY', '').strip()
 if not KEY:
     sys.exit('GS_KEY está vacío: revisá el secreto en Settings > Secrets and variables > Actions.')
 os.makedirs('datos', exist_ok=True)
-for sheet in ['CORDENADAS', 'REFERENCIA']:
+for sheet in ['CORDENADAS', 'REFERENCIA', 'V L']:
     qs = urllib.parse.urlencode({'key': KEY, 'valueRenderOption': 'FORMATTED_VALUE'})
     url = f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/{urllib.parse.quote(sheet)}?{qs}"
     try:

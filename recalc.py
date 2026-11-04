@@ -122,8 +122,34 @@ tpl, n = re.subn(r'id="invFecha" value="\d{4}-\d{2}-\d{2}"', 'id="invFecha" valu
 if n != 1:
     sys.exit('No encontré el campo de fecha')
 
+def build_vl():
+    H, rows = read_csv(os.path.join(DATOS, 'V L.csv'))
+    isku, igrp, ivol = col(H, 'productoEAN'), col(H, 'Codigo Grupo'), col(H, 'volumen')
+    imin, imax, iemp, inm = col(H, 'Stock Min'), col(H, 'Stock Max'), col(H, 'Cantidad Empaque'), col(H, 'descripcion')
+    miss = [n for n, i in [('productoEAN', isku), ('Codigo Grupo', igrp), ('Stock Min', imin), ('Stock Max', imax)] if i < 0]
+    if miss:
+        sys.exit('Faltan columnas en V L: ' + ', '.join(miss))
+    def num(r, i):
+        v = pnum(get(r, i)) if i >= 0 else None
+        if v is None:
+            return None
+        return int(v) if float(v).is_integer() else v
+    out = {}
+    for r in rows:
+        sku = int(re.sub(r'\D', '', get(r, isku)) or 0)
+        if not sku or sku in out:
+            continue
+        out[sku] = [get(r, igrp) or 'SIN GRUPO', num(r, ivol), num(r, imin), num(r, imax), num(r, iemp), get(r, inm)]
+    if not out:
+        sys.exit('La pestaña V L no tiene SKUs')
+    return out
+
 base = open(os.path.join(HERE, 'base.json'), encoding='utf-8').read()
-vl = open(os.path.join(HERE, 'vl.json'), encoding='utf-8').read()
+if os.path.exists(os.path.join(DATOS, 'V L.csv')):
+    vl = as_json(build_vl())
+    print('V L: %d SKUs' % len(json.loads(vl)))
+else:
+    vl = open(os.path.join(HERE, 'vl.json'), encoding='utf-8').read()
 out = tpl.replace('__BASE__', base).replace('__VL__', vl)
 with open(os.path.join(HERE, 'volumen_futuro.html'), 'w', encoding='utf-8') as f:
     f.write(out)
