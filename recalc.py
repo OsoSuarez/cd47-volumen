@@ -1,0 +1,135 @@
+import csv, json, re, sys, os, datetime
+from collections import defaultdict
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+DATOS = os.path.join(HERE, 'datos')
+FECHA = sys.argv[1] if len(sys.argv) > 1 else datetime.date.today().isoformat()
+
+def read_csv(path):
+    with open(path, encoding='utf-8-sig', newline='') as f:
+        rows = list(csv.reader(f))
+    return [h.strip() for h in rows[0]], rows[1:]
+
+def col(H, *names):
+    low = [n.lower() for n in names]
+    for i, h in enumerate(H):
+        if h.lower() in low:
+            return i
+    return -1
+
+def get(r, i):
+    return r[i].strip() if 0 <= i < len(r) else ''
+
+def pnum(s):
+    s = str(s or '').strip()
+    if not s:
+        return None
+    s = re.sub(r'[.,](?=\d{3}(\D|$))', '', s).replace(',', '.')
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+def is_one(v):
+    return re.sub(r'\.0+$', '', v.strip()) == '1'
+
+def is_yes(v):
+    return bool(re.match(r'^(true|1|verdadero|si|sí|x)$', v.strip(), re.I))
+
+def excl(z):
+    return bool(re.search(r'MRM|COMBI|BIN|CNC', z.upper()))
+
+def difer(z, u):
+    return 'DIFEREN' in (z + ' ' + u).upper()
+
+def pool(tp):
+    tp = tp.upper()
+    return 'CON' if tp == 'CONMFC' else tp
+
+# 1) Coordenadas: picking (Piso = 1), libres (E) por pool
+H, rows = read_csv(os.path.join(DATOS, 'CORDENADAS.csv'))
+iu, itp, ip = col(H, 'Ubicacion'), col(H, 'TipoProducto'), col(H, 'Piso')
+isel, iz = col(H, 'Seleccion'), col(H, 'Zona piso')
+if min(iu, itp, ip) < 0:
+    sys.exit('Faltan columnas en CORDENADAS (Ubicacion, TipoProducto, Piso)')
+picks, E = {}, defaultdict(int)
+for r in rows:
+    u = get(r, iu)
+    if not u or not is_one(get(r, ip)):
+        continue
+    z = get(r, iz)
+    if excl(z) or difer(z, u):
+        continue
+    tp = get(r, itp).upper()
+    picks[u] = tp
+    if not is_yes(get(r, isel)):
+        E[pool(tp)] += 1
+
+# 2) Inventario: stock picking por SKU y posiciones ocupadas (F) por pool
+H, rows = read_csv(os.path.join(DATOS, 'REFERENCIA.csv'))
+ie, isa, iu = col(H, 'EAN'), col(H, 'Saldo'), col(H, 'Ubicacion')
+iz, ia = col(H, 'Zona', 'Zona piso'), col(H, 'Area')
+if min(ie, isa, iu) < 0:
+    sys.exit('Faltan columnas en REFERENCIA (EAN, Saldo, Ubicacion)')
+STK, occ = defaultdict(float), defaultdict(float)
+for r in rows:
+    sku = int(re.sub(r'\D', '', get(r, ie)) or 0)
+    if not sku:
+        continue
+    u, z = get(r, iu), get(r, iz)
+    if excl(z) or difer(z, u):
+        continue
+    sal = pnum(get(r, isa))
+    if sal is None or u not in picks:
+        continue
+    STK[sku] += sal
+    occ[u] += sal
+F = defaultdict(int)
+for u, s in occ.items():
+    if s > 0:
+        F[pool(picks[u])] += 1
+
+# 3) Grupos de la plantilla y ocupación por grupo
+tpl = open(os.path.join(HERE, 'tpl3.html'), encoding='utf-8').read()
+tpl = tpl.replace('<input type="password" id="gsKey"', '<input type="hidden" id="gsKey"', 1)
+tpl = tpl.replace('<button class="btn y" id="invSync">', '<button class="btn y" id="invSync" style="display:none">', 1)
+m = re.search(r'^const GROUPS=(\{.*\});$', tpl, re.M)
+if not m:
+    sys.exit('No encontré const GROUPS en tpl3.html')
+GROUPS = json.loads(m.group(1))
+OCC, OCUP = {}, {}
+for g in GROUPS:
+    p = pool(g)
+    e, f = E.get(p, 0), F.get(p, 0)
+    OCC[g] = {'E': e, 'F': f}
+    OCUP[g] = (f / e) if e > 0 else None
+
+def as_json(v):
+    return json.dumps(v, ensure_ascii=False, separators=(',', ':'))
+
+def patch(txt, name, obj):
+    new = 'let %s=%s;' % (name, as_json(obj))
+    txt, n = re.subn(r'^let ' + name + r'=.*$', lambda _: new, txt, count=1, flags=re.M)
+    if n != 1:
+        sys.exit('No encontré let %s en tpl3.html' % name)
+    return txt
+
+stk_out = {str(k): (int(v) if float(v).is_integer() else v) for k, v in STK.items() if v > 0}
+tpl = patch(tpl, 'STK', stk_out)
+tpl = patch(tpl, 'OCC', OCC)
+tpl = patch(tpl, 'OCUP', OCUP)
+tpl, n = re.subn(r'id="invFecha" value="\d{4}-\d{2}-\d{2}"', 'id="invFecha" value="%s"' % FECHA, tpl, count=1)
+if n != 1:
+    sys.exit('No encontré el campo de fecha')
+
+base = open(os.path.join(HERE, 'base.json'), encoding='utf-8').read()
+vl = open(os.path.join(HERE, 'vl.json'), encoding='utf-8').read()
+out = tpl.replace('__BASE__', base).replace('__VL__', vl)
+with open(os.path.join(HERE, 'volumen_futuro.html'), 'w', encoding='utf-8') as f:
+    f.write(out)
+
+con_stock = len(stk_out)
+print('Fecha: %s' % FECHA)
+print('SKUs con stock picking > 0: %d' % con_stock)
+print('Posiciones picking libres (E): %d · ocupadas (F): %d' % (sum(E.values()), sum(F.values())))
+print('Archivo generado: volumen_futuro.html')
