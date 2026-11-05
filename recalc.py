@@ -106,8 +106,6 @@ print('ALM SKUs: %d · cruce sync->SKU: %d' % (len(ALM), len(SYNC)))
 
 # 3) Grupos de la plantilla y ocupación por grupo
 tpl = open(os.path.join(HERE, 'tpl3.html'), encoding='utf-8').read()
-tpl = tpl.replace('<input type="password" id="gsKey"', '<input type="hidden" id="gsKey"', 1)
-tpl = tpl.replace('<button class="btn y" id="invSync">', '<button class="btn y" id="invSync" style="display:none">', 1)
 m = re.search(r'^const GROUPS=(\{.*\});$', tpl, re.M)
 if not m:
     sys.exit('No encontré const GROUPS en tpl3.html')

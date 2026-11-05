@@ -375,17 +375,9 @@ table.cmp td.hi{color:var(--yellow2)}
   <div class="panel">
     <div class="toolbar" style="margin-bottom:10px">
       <div class="ptitle" style="margin:0">Inventario y coordenadas · stock y % ocupación</div><span class="spacer"></span>
-      <input type="password" id="gsKey" placeholder="Clave API de Google" style="width:200px"><button class="btn y" id="invSync">Traer de Google Sheets</button><span class="note" style="margin:0">Última actualización: <input type="date" id="invFecha" value="2026-11-04"></span>
+      <a class="btn y" id="invRun" href="https://github.com/OsoSuarez/cd47-volumen/actions/workflows/actualizar.yml" target="_blank" rel="noopener" style="text-decoration:none">Actualizar desde GitHub ↗</a><span class="note" style="margin:0">Última actualización: <input type="date" id="invFecha" value="2026-11-04"></span>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px">
-      <label class="drop" id="dropInv"><div><b>Soltá acá el stock de hoy</b> o hacé clic para elegirlo
-        <small>Columnas: EAN, Saldo, Ubicacion, Zona, Area. Cuenta solo picking (Piso = 1 en coordenadas), sin MRM, COMBI, BIN, CNC ni Diferencias.</small></div>
-        <input type="file" id="fiInv" accept=".csv,.txt,.xlsx" hidden></label>
-      <label class="drop" id="dropCoo"><div><b>Soltá acá el archivo de coordenadas</b> o hacé clic para elegirlo
-        <small>Columnas: Ubicacion, TipoProducto, Piso, Seleccion, Zona piso. Seleccion = VERDADERO queda bloqueada y no cuenta como libre.</small></div>
-        <input type="file" id="fiCoo" accept=".csv,.txt,.xlsx" hidden></label>
-    </div>
-    <div class="note" id="invStatus">Datos embebidos: inventario y coordenadas del 04/11. Soltá archivos para actualizar.</div>
+    <div class="note" id="invStatus">Datos embebidos: inventario y coordenadas del 04/11. Para traer lo último, tocá “Actualizar desde GitHub”: se abre la acción, apretá <b>Run workflow</b> y, cuando termine (≈1 min), recargá esta página.</div>
   </div>
   <div class="panel">
     <div class="ptitle" style="margin-bottom:12px">Stock y ocupación por grupo</div>
@@ -1041,52 +1033,7 @@ function renderInv(){
   T.innerHTML=h+'</tbody>';
 }
 initPool();
-const dI=$('#dropInv'),dC=$('#dropCoo');
-[dI,dC].forEach(d=>{['dragenter','dragover'].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.add('over')}));['dragleave','drop'].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.remove('over')}))});
-dI.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)loadInvFile(f,'inv')});
-dC.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)loadInvFile(f,'coo')});
-$('#fiInv').onchange=e=>{const f=e.target.files[0];if(f)loadInvFile(f,'inv')};
-$('#fiCoo').onchange=e=>{const f=e.target.files[0];if(f)loadInvFile(f,'coo')};
 $('#invFecha').onchange=()=>updFecha();
-// ---------- Inventario / coordenadas: Google Sheets ----------
-const GS_ID='12UIdXUSc0S6LZibwD_N2zJvDxlehZ_tvVWmrJLjA7E8';
-function gsKey(){
-  const f=$('#gsKey');
-  let k=(f&&f.value.trim())||'';
-  try{if(k)localStorage.setItem('cd47_gs_key',k);else k=localStorage.getItem('cd47_gs_key')||''}catch(e){}
-  return k;
-}
-async function gsFetch(sheet){
-  const key=gsKey();
-  if(!key)throw new Error('Falta la clave de API: pegala en el campo de arriba.');
-  const url=`https://sheets.googleapis.com/v4/spreadsheets/${GS_ID}/values/${encodeURIComponent(sheet)}?key=${encodeURIComponent(key)}&valueRenderOption=UNFORMATTED_VALUE`;
-  const r=await fetch(url);
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(`${sheet}: ${d.error&&d.error.message?d.error.message:'HTTP '+r.status}.`);
-  const vals=d.values||[];
-  if(!vals.length)throw new Error(`${sheet}: la hoja vino vacía.`);
-  const csv=vals.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');
-  return new File([csv],sheet+'.csv',{type:'text/csv'});
-}
-async function syncSheets(){
-  const st=$('#invStatus'),btn=$('#invSync');btn.disabled=true;
-  try{
-    st.textContent='Trayendo CORDENADAS…';
-    const fCoo=await gsFetch('CORDENADAS');
-    await loadCoo(fCoo);
-    st.textContent='Trayendo REFERENCIA (stock)…';
-    const fInv=await gsFetch('REFERENCIA');
-    await loadInv(fInv);
-    const h=new Date(),p=n=>String(n).padStart(2,'0');
-    $('#invFecha').value=`${h.getFullYear()}-${p(h.getMonth()+1)}-${p(h.getDate())}`;
-    recalcInv();
-    st.textContent=`Actualizado desde Google Sheets: ${nf.format(INV.arr.length)} filas de stock y ${nf.format(PICKS.size)} posiciones de picking.`;
-  }catch(e){
-    st.innerHTML=`<span style="color:#ff9d97">⚠ ${esc(e.message)} Si el navegador bloquea la lectura, descargá cada pestaña como CSV y soltala en su zona.</span>`;
-  }finally{btn.disabled=false}
-}
-$('#invSync').onclick=syncSheets;
-try{const sk=localStorage.getItem('cd47_gs_key');if(sk&&$('#gsKey'))$('#gsKey').value=sk}catch(e){}
 
 // ---------- Reabasto diario (demanda TR) ----------
 let trDem=null,trFile='',trFecha='';
