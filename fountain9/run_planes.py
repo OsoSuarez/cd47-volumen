@@ -128,11 +128,23 @@ def create_plan(page, preset):
     page.wait_for_timeout(500)
     selector = page.locator(".searchUserView").first
     selector.wait_for(state="visible", timeout=10_000)  # aparece al pasar el cursor
-    # Nos movemos del ícono a la flecha sin perder el hover, y clicamos con el cursor real.
-    flecha = selector.locator(".ant-select-arrow").first.bounding_box()
-    page.mouse.move(flecha["x"] + flecha["width"] / 2, flecha["y"] + flecha["height"] / 2, steps=8)
-    page.wait_for_timeout(300)
-    page.mouse.click(flecha["x"] + flecha["width"] / 2, flecha["y"] + flecha["height"] / 2)
+    # Al alejarse del ícono el selector se oculta antes de llegar a la flecha, así que
+    # disparamos mousedown/mouseup/click sobre el selector (Ant Design abre con mousedown).
+    page.evaluate("""() => {
+        const sel = document.querySelector('.searchUserView .ant-select-selector')
+                 || document.querySelector('.searchUserView .ant-select');
+        if (!sel) return false;
+        for (const t of ['mousedown', 'mouseup', 'click'])
+            sel.dispatchEvent(new MouseEvent(t, {bubbles: true, cancelable: true, view: window}));
+        return true;
+    }""")
+    page.wait_for_timeout(800)
+    if not page.locator(".ant-select-dropdown:visible").count():
+        # Respaldo: clic real en la flecha, con el cursor sobre el selector.
+        flecha = selector.locator(".ant-select-arrow").first.bounding_box()
+        page.mouse.move(flecha["x"] + flecha["width"] / 2, flecha["y"] + flecha["height"] / 2)
+        page.mouse.down()
+        page.mouse.up()
     # Esperamos a que la lista de presets cargue antes de elegir.
     opcion = page.locator(".ant-select-dropdown:visible li", has_text=preset).first
     opcion.wait_for(state="visible", timeout=15_000)
