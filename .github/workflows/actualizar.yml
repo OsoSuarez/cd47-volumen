@@ -3,6 +3,7 @@ name: Actualizar CD47
 on:
   schedule:
     - cron: '15 11 * * *'   # 08:15 hora de Buenos Aires
+    - cron: '0 * * * *'     # cada hora: inventario, coordenadas y V L
   workflow_dispatch:
   push:
     branches: [main]
