@@ -118,7 +118,17 @@ def go_replenishment(page):
     print("En Replenishment / Transfer Orders")
 
 
+def esperar_carga(page, timeout=120_000):
+    # Tras crear un plan la página queda con un spinner (.clipLoader) que tapa los controles.
+    try:
+        page.locator(".clipLoader").first.wait_for(state="hidden", timeout=timeout)
+    except Exception:
+        pass
+    page.wait_for_timeout(1000)
+
+
 def create_plan(page, preset, texto_opcion):
+    esperar_carga(page)
     # El bloque del selector solo se muestra con :hover sobre el ícono verde, y ese hover no se
     # reproduce desde Playwright. Lo forzamos visible por CSS y después clic directo al combobox.
     page.add_style_tag(content=".searchUserView { display: block !important; visibility: visible !important; opacity: 1 !important; }")
