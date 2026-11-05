@@ -24,14 +24,18 @@ def nueva_pagina(p):
     channel = os.environ.get("F9_CHANNEL") or None
     headless = os.environ.get("F9_HEADLESS", "1") != "0"
     perfil = os.environ.get("F9_PERFIL")
+    # Con ventana visible: Chrome arranca maximizado y la página toma el tamaño real de la ventana.
+    args = [] if headless else ["--start-maximized"]
+    no_viewport = not headless
     if perfil:
         ctx = p.chromium.launch_persistent_context(
-            perfil, channel=channel, headless=headless, accept_downloads=True
+            perfil, channel=channel, headless=headless, accept_downloads=True,
+            args=args, no_viewport=no_viewport,
         )
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         return ctx, page
-    browser = p.chromium.launch(channel=channel, headless=headless)
-    ctx = browser.new_context(accept_downloads=True)
+    browser = p.chromium.launch(channel=channel, headless=headless, args=args)
+    ctx = browser.new_context(accept_downloads=True, no_viewport=no_viewport)
     return ctx, ctx.new_page()
 
 
@@ -83,6 +87,8 @@ def dump_debug(page, name):
 def go_replenishment(page):
     # Tras el login se abre el dashboard de pronóstico. El módulo de compras/reabasto
     # está en la barra lateral con el ícono fa-cart-plus.
+    # Esperamos a que la barra lateral esté visible antes de tocar nada (ventana maximizada).
+    page.locator("i.fa-cart-plus").first.wait_for(state="attached", timeout=60_000)
     # dispatch_event evita que la barra lateral tape el clic (intercepta eventos del puntero).
     page.locator("i.fa-cart-plus").first.dispatch_event("click", timeout=20_000)
     page.wait_for_timeout(1500)
@@ -110,7 +116,11 @@ def create_plan(page, preset):
         return best;
     }""")
     icono = page.locator(".userSpecificView").nth(idx)
-    icono.hover(timeout=20_000)
+    # El panel activo de las pestañas puede tapar el ícono y hover() falla por "intercepts pointer events".
+    # Disparamos los eventos de cursor directamente sobre el elemento.
+    icono.scroll_into_view_if_needed(timeout=20_000)
+    icono.dispatch_event("mouseenter")
+    icono.dispatch_event("mouseover")
     selector = page.locator(".searchUserView").first
     selector.wait_for(state="visible", timeout=10_000)  # aparece al pasar el cursor
     selector.locator(".ant-select-arrow").first.click(timeout=20_000)
