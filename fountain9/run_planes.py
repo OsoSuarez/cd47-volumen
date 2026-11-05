@@ -33,6 +33,23 @@ def login(page):
         print("TEXTO:", page.inner_text("body")[:800].replace("\n", " | "))
         raise
     page.wait_for_load_state("networkidle")
+    pass_secondary_screen(page)
+
+
+def pass_secondary_screen(page):
+    # Si después del login aparece un modal o pantalla secundaria, se muestra su texto y se confirma.
+    page.wait_for_timeout(2000)
+    modal = page.locator("[role=dialog]:visible, .modal:visible, .ant-modal:visible").first
+    if modal.count():
+        print("PANTALLA SECUNDARIA:", modal.inner_text()[:400].replace("\n", " | "))
+        btn = modal.locator(
+            "button.btn-primary, button.ant-btn-primary, button[type=submit], "
+            "button:has-text('Continue'), button:has-text('Continuar'), "
+            "button:has-text('OK'), button:has-text('Aceptar'), button:has-text('Confirm')"
+        ).first
+        if btn.count():
+            btn.click()
+            page.wait_for_timeout(2000)
 
 
 def dump_debug(page, name):
