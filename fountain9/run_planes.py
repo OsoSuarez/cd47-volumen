@@ -119,8 +119,11 @@ def go_replenishment(page):
 
 
 def create_plan(page, preset, texto_opcion):
-    # El selector de vistas es un combobox: se abre con un clic directo, sin hover.
-    page.get_by_role("combobox").filter(has_text="Select the view").click(timeout=20_000)
+    # El bloque del selector solo se muestra con :hover sobre el ícono verde, y ese hover no se
+    # reproduce desde Playwright. Lo forzamos visible por CSS y después clic directo al combobox.
+    page.add_style_tag(content=".searchUserView { display: block !important; visibility: visible !important; opacity: 1 !important; }")
+    page.wait_for_timeout(600)
+    page.locator(".searchUserView").get_by_role("combobox").first.click(timeout=20_000)
     page.wait_for_timeout(1000)
     page.get_by_text(texto_opcion).click(timeout=20_000)
     page.wait_for_timeout(2000)
