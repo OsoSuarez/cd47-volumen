@@ -45,19 +45,22 @@ def login(page):
 
 
 def pass_secondary_screen(page):
-    # Si después del login aparece un modal o pantalla secundaria, se muestra su texto y se confirma.
+    # Si después del login aparece un modal (p. ej. "Choose Dataset"), se loguea su contenido
+    # y se confirma con el botón OK / Aceptar / Continuar.
     page.wait_for_timeout(2000)
     modal = page.locator("[role=dialog]:visible, .modal:visible, .ant-modal:visible").first
-    if modal.count():
-        print("PANTALLA SECUNDARIA:", modal.inner_text()[:400].replace("\n", " | "))
-        btn = modal.locator(
-            "button.btn-primary, button.ant-btn-primary, button[type=submit], "
-            "button:has-text('Continue'), button:has-text('Continuar'), "
-            "button:has-text('OK'), button:has-text('Aceptar'), button:has-text('Confirm')"
-        ).first
-        if btn.count():
-            btn.click()
-            page.wait_for_timeout(2000)
+    if not modal.count():
+        print("SIN PANTALLA SECUNDARIA. URL:", page.url)
+        return
+    print("PANTALLA SECUNDARIA:", modal.inner_text()[:400].replace("\n", " | "))
+    print("BOTONES:", modal.locator("button").all_inner_texts())
+    ok = modal.locator("button", has_text=re.compile(r"^\s*(OK|Aceptar|Continuar|Continue|Confirm|Confirmar)\s*$", re.I)).first
+    if ok.count():
+        ok.click()
+        print("CLIC EN OK. URL:", page.url)
+    else:
+        print("NO ENCONTRÉ BOTÓN OK")
+    page.wait_for_timeout(3000)
 
 
 def dump_debug(page, name):
