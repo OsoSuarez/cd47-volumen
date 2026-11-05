@@ -149,13 +149,14 @@ def create_plan(page, preset):
     if not visible:
         raise RuntimeError(f"El selector verde no se desplegó con el cursor sobre el icono. Icono en {icono.bounding_box()}")
     # Igual que a mano: con el selector visible, clic real en la flecha para expandirlo.
-    flecha = selector.locator(".ant-select-arrow").first.bounding_box()
-    if flecha:
-        cx, cy = flecha["x"] + flecha["width"] / 2, flecha["y"] + flecha["height"] / 2
-        page.mouse.move(cx, cy, steps=3)
-        page.wait_for_timeout(300)
-        page.mouse.click(cx, cy)
-        page.wait_for_timeout(800)
+    # La flecha queda debajo del icono, a 64 px de su borde superior y centrada en su eje.
+    # Bajamos en línea recta desde el icono para no salir de la zona del selector.
+    cx = box["x"] + box["width"] / 2
+    cy = box["y"] + 64
+    page.mouse.move(cx, cy, steps=8)
+    page.wait_for_timeout(300)
+    page.mouse.click(cx, cy)
+    page.wait_for_timeout(800)
     # Si la flecha no abrió el desplegable, respaldo por teclado: enfocamos el campo,
     # escribimos el nombre del preset y confirmamos con Enter.
     page.evaluate("() => document.querySelector('.searchUserView input').focus()")
