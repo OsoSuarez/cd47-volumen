@@ -69,6 +69,10 @@ def dump_debug(page, name):
 
 
 def go_replenishment(page):
+    # Tras el login se abre el dashboard de pronóstico. El módulo de compras/reabasto
+    # está en la barra lateral con el ícono fa-cart-plus.
+    page.locator("i.fa-cart-plus").first.click(timeout=20_000)
+    page.wait_for_timeout(1500)
     try:
         page.get_by_text("Replenishment / Transfer Orders").click(timeout=20_000)
     except Exception:
