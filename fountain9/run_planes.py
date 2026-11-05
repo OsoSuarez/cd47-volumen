@@ -155,6 +155,17 @@ def create_plan(page, preset):
             [cx, cy]))
         print("Diagnóstico, display del selector:", page.evaluate(
             "() => { const s = document.querySelector('.searchUserView'); return s ? getComputedStyle(s).display : 'no existe' }"))
+        print("Diagnóstico, ventana con foco:", page.evaluate("() => document.hasFocus()"))
+        # Probamos disparar eventos de entrada sobre el contenedor del icono y miramos si el selector se muestra.
+        for evento in ["pointerenter", "mouseenter", "mouseover"]:
+            page.evaluate(
+                "([x, y, ev]) => { const e = document.elementFromPoint(x, y); if (!e) return;"
+                " const c = e.closest('.userSpecificView, .floating-button') || e;"
+                " c.dispatchEvent(new Event(ev, {bubbles: true})); }",
+                [cx, cy, evento])
+            page.wait_for_timeout(400)
+            print(f"Diagnóstico, tras {evento}:", page.evaluate(
+                "() => { const s = document.querySelector('.searchUserView'); return s ? getComputedStyle(s).display : 'no existe' }"))
         raise RuntimeError(f"El selector verde no se desplegó con el cursor sobre el icono. Icono en {icono.bounding_box()}")
     # Igual que a mano: con el selector visible, clic real en la flecha para expandirlo.
     # La flecha queda debajo del icono, a 64 px de su borde superior y centrada en su eje.
