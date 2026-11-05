@@ -128,28 +128,20 @@ def create_plan(page, preset):
     page.wait_for_timeout(500)
     selector = page.locator(".searchUserView").first
     selector.wait_for(state="visible", timeout=10_000)  # aparece al pasar el cursor
-    # Al alejarse del ícono el selector se oculta antes de llegar a la flecha, así que
-    # disparamos mousedown/mouseup/click sobre el selector (Ant Design abre con mousedown).
-    page.evaluate("""() => {
-        const sel = document.querySelector('.searchUserView .ant-select-selector')
-                 || document.querySelector('.searchUserView .ant-select');
-        if (!sel) return false;
-        for (const t of ['mousedown', 'mouseup', 'click'])
-            sel.dispatchEvent(new MouseEvent(t, {bubbles: true, cancelable: true, view: window}));
-        return true;
-    }""")
+    # Elegimos el preset por teclado: el mouse no llega a abrir el desplegable.
+    # Enfocamos el campo de búsqueda del selector, escribimos el nombre y confirmamos con Enter.
+    page.evaluate("() => document.querySelector('.searchUserView input').focus()")
+    page.wait_for_timeout(300)
+    page.keyboard.press("ArrowDown")
     page.wait_for_timeout(800)
-    if not page.locator(".ant-select-dropdown:visible").count():
-        # Respaldo: clic real en la flecha, con el cursor sobre el selector.
-        flecha = selector.locator(".ant-select-arrow").first.bounding_box()
-        page.mouse.move(flecha["x"] + flecha["width"] / 2, flecha["y"] + flecha["height"] / 2)
-        page.mouse.down()
-        page.mouse.up()
-    # Esperamos a que la lista de presets cargue antes de elegir.
-    opcion = page.locator(".ant-select-dropdown:visible li", has_text=preset).first
-    opcion.wait_for(state="visible", timeout=15_000)
-    opcion.click(timeout=20_000)
+    page.keyboard.type(preset, delay=40)
+    page.wait_for_timeout(800)
+    page.keyboard.press("Enter")
     page.wait_for_timeout(1000)
+    # Verificamos que el selector quedó con el preset elegido antes de crear el plan.
+    elegido = selector.locator(".ant-select-selection-item").first.inner_text(timeout=5_000)
+    if elegido.strip() != preset:
+        raise RuntimeError(f"No se seleccionó el preset: el selector muestra {elegido!r}")
     page.locator("button.plan-create-button").first.click(timeout=20_000)
     # Si aparece modal de confirmación, se acepta.
     modal = page.locator(".ant-modal:visible button.ant-btn-primary")
