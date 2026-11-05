@@ -18,12 +18,21 @@ WAIT_SECONDS = 16 * 60
 OUT = pathlib.Path("descargas")
 
 
-def lanzar(p):
-    # F9_CHANNEL=chrome usa el Chrome instalado en la PC (con tu perfil de uso normal).
-    # F9_HEADLESS=0 muestra la ventana.
+def nueva_pagina(p):
+    # F9_PERFIL: carpeta donde se guarda la sesión de Chrome (se resuelve el captcha una vez).
+    # F9_CHANNEL=chrome usa el Chrome instalado. F9_HEADLESS=0 muestra la ventana.
     channel = os.environ.get("F9_CHANNEL") or None
     headless = os.environ.get("F9_HEADLESS", "1") != "0"
-    return p.chromium.launch(channel=channel, headless=headless)
+    perfil = os.environ.get("F9_PERFIL")
+    if perfil:
+        ctx = p.chromium.launch_persistent_context(
+            perfil, channel=channel, headless=headless, accept_downloads=True
+        )
+        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        return ctx, page
+    browser = p.chromium.launch(channel=channel, headless=headless)
+    ctx = browser.new_context(accept_downloads=True)
+    return ctx, ctx.new_page()
 
 
 def login(page):
@@ -127,23 +136,21 @@ def download_last_two(page):
 def main():
     OUT.mkdir(exist_ok=True)
     with sync_playwright() as p:
-        browser = lanzar(p)
-        page = browser.new_context(accept_downloads=True).new_page()
+        ctx, page = nueva_pagina(p)
         login(page)
         go_replenishment(page)
         for preset in PRESETS:
             create_plan(page, preset)
-        browser.close()
+        ctx.close()
 
     print(f"Planes disparados. Esperando {WAIT_SECONDS // 60} min para que Fountain9 los procese.")
     time.sleep(WAIT_SECONDS)
 
     with sync_playwright() as p:
-        browser = lanzar(p)
-        page = browser.new_context(accept_downloads=True).new_page()
+        ctx, page = nueva_pagina(p)
         login(page)
         download_last_two(page)
-        browser.close()
+        ctx.close()
 
 
 if __name__ == "__main__":
