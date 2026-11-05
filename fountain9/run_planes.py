@@ -28,8 +28,20 @@ def login(page):
         page.wait_for_load_state("networkidle")
 
 
+def dump_debug(page, name):
+    # Guarda captura y HTML para diagnosticar selectores desde los artefactos del workflow.
+    dbg = OUT / "debug"
+    dbg.mkdir(parents=True, exist_ok=True)
+    page.screenshot(path=str(dbg / f"{name}.png"), full_page=True)
+    (dbg / f"{name}.html").write_text(page.content(), encoding="utf-8")
+
+
 def go_replenishment(page):
-    page.get_by_text("Replenishment / Transfer Orders").click()
+    try:
+        page.get_by_text("Replenishment / Transfer Orders").click(timeout=20_000)
+    except Exception:
+        dump_debug(page, "sin_menu_replenishment")
+        raise
     page.wait_for_timeout(2000)
 
 
@@ -64,6 +76,7 @@ def download_last_two(page):
 
 
 def main():
+    OUT.mkdir(exist_ok=True)
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_context(accept_downloads=True).new_page()
