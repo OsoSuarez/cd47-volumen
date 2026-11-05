@@ -128,9 +128,15 @@ def create_plan(page, preset):
     page.wait_for_timeout(500)
     selector = page.locator(".searchUserView").first
     selector.wait_for(state="visible", timeout=10_000)  # aparece al pasar el cursor
-    selector.locator(".ant-select-arrow").first.click(timeout=20_000)
-    page.wait_for_timeout(800)
-    page.locator(".ant-select-dropdown:visible li", has_text=preset).first.click(timeout=20_000)
+    # Nos movemos del ícono a la flecha sin perder el hover, y clicamos con el cursor real.
+    flecha = selector.locator(".ant-select-arrow").first.bounding_box()
+    page.mouse.move(flecha["x"] + flecha["width"] / 2, flecha["y"] + flecha["height"] / 2, steps=8)
+    page.wait_for_timeout(300)
+    page.mouse.click(flecha["x"] + flecha["width"] / 2, flecha["y"] + flecha["height"] / 2)
+    # Esperamos a que la lista de presets cargue antes de elegir.
+    opcion = page.locator(".ant-select-dropdown:visible li", has_text=preset).first
+    opcion.wait_for(state="visible", timeout=15_000)
+    opcion.click(timeout=20_000)
     page.wait_for_timeout(1000)
     page.locator("button.plan-create-button").first.click(timeout=20_000)
     # Si aparece modal de confirmación, se acepta.
