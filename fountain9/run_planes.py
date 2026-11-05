@@ -131,10 +131,18 @@ def create_plan(page, preset, texto_opcion):
 
     # Fecha de simulación: hoy + 7 días (en la grabación, el 12 estando a 5 de noviembre).
     dia = (date.today() + timedelta(days=7)).day
-    page.get_by_role("button", name="icon: right Future Order").click(timeout=20_000)
-    page.wait_for_timeout(1000)
-    page.get_by_role("switch").first.click(timeout=20_000)
-    page.get_by_role("switch").nth(1).click(timeout=20_000)
+    # El bloque puede haber quedado abierto del plan anterior: solo lo expandimos si está cerrado
+    # (el botón se llama "icon: right ..." cuando está colapsado).
+    expandir = page.get_by_role("button", name="icon: right Future Order")
+    if expandir.count():
+        expandir.first.click(timeout=20_000)
+        page.wait_for_timeout(1000)
+    # Lo mismo con los switches: solo los tocamos si no están ya encendidos, para no apagarlos.
+    for i in range(2):
+        sw = page.get_by_role("switch").nth(i)
+        if sw.get_attribute("aria-checked") != "true":
+            sw.click(timeout=20_000)
+            page.wait_for_timeout(500)
     page.get_by_role("textbox", name="Select date").click(timeout=20_000)
     page.wait_for_timeout(800)
     page.get_by_text(str(dia), exact=True).click(timeout=20_000)
