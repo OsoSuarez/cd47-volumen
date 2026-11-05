@@ -388,10 +388,11 @@ table.cmp td.hi{color:var(--yellow2)}
 <div class="wrap" id="t6" style="display:none">
   <div class="panel">
     <div class="toolbar" style="margin-bottom:10px">
-      <div class="ptitle" style="margin:0">Reabasto diario · demanda TR vs picking y almacenamiento</div><span class="spacer"></span>
+      <div class="ptitle" style="margin:0">Reabasto diario · necesidad futura (mañana)</div><span class="spacer"></span>
+      <select id="rbSrc"><option value="A">Plan A · necesidad futura (mañana)</option><option value="B">Plan B · Excel de TR</option></select>
       <button class="btn y" id="rbCsv">Descargar CSV</button>
     </div>
-    <label class="drop" id="dropTR"><div><b>Soltá acá el Excel de Detalle de TRs</b> o hacé clic para elegirlo
+    <label class="drop" id="dropTR"><div><b>Plan B · Soltá acá el Excel de Detalle de TRs</b> o hacé clic para elegirlo
       <small>Se suma Q_Ordered por sync_Id. Regla: picking ≥ demanda → no reabastece · picking &lt; demanda y hay almacenamiento → reabastece · sin almacenamiento → no reabastece.</small></div>
       <input type="file" id="fiTR" accept=".xlsx,.xls" hidden></label>
     <div class="note" id="rbStatus" style="margin-top:8px">Todavía no cargaste la demanda del día.</div>
@@ -1037,6 +1038,18 @@ $('#invFecha').onchange=()=>updFecha();
 
 // ---------- Reabasto diario (demanda TR) ----------
 let trDem=null,trFile='',trFecha='';
+let rbSrc='A';
+function tomorrowISO(){
+  const p=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Buenos_Aires',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const [y,m,d]=p.split('-').map(Number);
+  return new Date(Date.UTC(y,m-1,d+1)).toISOString().slice(0,10);
+}
+function planDem(iso){
+  const dem=new Map();
+  for(const f of files){if(f.status!=='ok'||!f.dates.has(iso))continue;const R=f.recs;
+    for(let i=0;i<R.length;i+=4){if(String(R[i+2])!==iso)continue;const s=+R[i+1];dem.set(s,(dem.get(s)||0)+(+R[i+3]||0))}}
+  return dem;
+}
 const fmtFecha=v=>{if(typeof v==='number'){const d=new Date(Math.round((v-25569)*86400000));return d.toLocaleDateString('es-AR',{timeZone:'UTC'})}return String(v||'')};
 async function loadTR(file){
   const st=$('#rbStatus');st.textContent='Leyendo '+file.name+'…';
@@ -1060,14 +1073,15 @@ async function loadTR(file){
       dem.set(s,(dem.get(s)||0)+q);
       if(iF>=0&&!fecha&&r[iF]!=='')fecha=fmtFecha(r[iF]);
     }
-    trDem=dem;trFile=file.name;trFecha=fecha;
+    trDem=dem;trFile=file.name;trFecha=fecha;rbSrc='B';$('#rbSrc').value='B';
     rbRender();
     st.textContent=`${file.name}${fecha?' · fecha esperada '+fecha:''}: ${nf.format(dem.size)} sync con demanda.`;
   }catch(e){st.innerHTML=`<span style="color:#ff9d97">⚠ ${esc(e.message)}</span>`}
 }
 function rbCalc(){
   const dE=new Map();let sinN=0,sinU=0;
-  for(const [s,q] of trDem){const e=SYNC[s];if(e==null){sinN++;sinU+=q;continue}dE.set(+e,(dE.get(+e)||0)+q)}
+  if(rbSrc==='A'){for(const [s,q] of planDem(tomorrowISO()))dE.set(s,q)}
+  else for(const [s,q] of trDem){const e=SYNC[s];if(e==null){sinN++;sinU+=q;continue}dE.set(+e,(dE.get(+e)||0)+q)}
   const out=[];
   for(const [s,info] of mm.map){
     if(info.grp==='SIN GRUPO')continue;
@@ -1087,7 +1101,11 @@ function rbCalc(){
 }
 function rbRender(){
   const T=$('#rbTbl'),K=$('#rbKpis'),N=$('#rbNote');
-  if(!trDem||!mm){K.innerHTML='';T.innerHTML='<tr><td class="empty">Soltá el Excel de demanda para simular.</td></tr>';N.textContent='';return}
+  const tm=tomorrowISO(),tmES=tm.split('-').reverse().join('/');
+  if(!mm){K.innerHTML='';T.innerHTML='<tr><td class="empty">Cargando datos…</td></tr>';N.textContent='';return}
+  if(rbSrc==='A'&&!files.some(f=>f.status==='ok'&&f.dates.has(tm))){K.innerHTML='';T.innerHTML=`<tr><td class="empty">El plan no trae necesidad para mañana (${tmES}). Usá el Plan B (Excel de TR).</td></tr>`;N.textContent='';return}
+  if(rbSrc==='B'&&!trDem){K.innerHTML='';T.innerHTML='<tr><td class="empty">Soltá el Excel de demanda TR para simular el Plan B.</td></tr>';N.textContent='';return}
+  if(rbSrc==='A')$('#rbStatus').textContent=`Plan A · necesidad futura del ${tmES} (mañana), tomada del plan cargado.`;
   const {out,sinN,sinU}=rbCalc();
   const si=out.filter(r=>r.gen==='Sí');
   const sumCub=si.reduce((a,r)=>a+r.cub,0),sumB=si.reduce((a,r)=>a+r.enB,0);
@@ -1097,7 +1115,7 @@ function rbRender(){
     ['Unidades a cubrir',nf.format(Math.round(sumCub)),'demanda menos picking'],
     ['Unidades en batch',nf.format(Math.round(sumB)),'redondeado al batch de la V L'],
     ['Demanda sobre el Max',nf.format(sobre),'SKUs con demanda mayor al Max de la V L (o sin Max)'],
-    ['Demanda sin cruce',nf.format(sinN),`sync sin SKU · ${nf.format(Math.round(sinU))} unidades`],
+    ['Demanda sin cruce',nf.format(sinN),rbSrc==='A'?'no aplica con Plan A':`sync sin SKU · ${nf.format(Math.round(sinU))} unidades`],
   ].map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
   const f=$('#rbF').value;
   let list=out.filter(r=>f==='all'||(f==='si'&&r.gen==='Sí')||(f==='sobre'&&r.sobreMax));
@@ -1107,15 +1125,15 @@ function rbRender(){
   for(let i=0;i<lim;i++){const r=list[i];const col=r.gen==='Sí'?'#ffd34d':'var(--ink2)';
     h+=`<tr><td class="l mono">${r.s}</td><td class="l nm" title="${esc(r.name)}">${esc(r.name)}</td><td class="tc">${esc(r.grp)}</td><td>${f0(r.d)}</td><td>${f0(r.p)}</td><td>${f0(r.a)}</td><td>${f0(r.min)}</td><td>${f0(r.max)}</td><td>${f0(r.emp)}</td><td${r.sobreMax?' style="color:#ff9d97"':''}>${r.pct==null?(r.d>0?'sin Max':'—'):nf1.format(r.pct)+'%'}</td><td class="l" style="color:${col};font-weight:600">${r.gen}</td><td class="l" style="color:var(--ink2)">${r.mot}</td><td>${r.gen==='Sí'?f0(r.cub):'—'}</td><td>${r.gen==='Sí'?f0(r.enB):'—'}</td></tr>`}
   T.innerHTML=h+'</tbody>';
-  N.textContent=`Mostrando ${nf.format(lim)} de ${nf.format(list.length)} SKUs. Demanda = suma de Q_Ordered por sync_Id del archivo${trFile?' ('+trFile+')':''}. Picking = stock de picking del último inventario. Almacenamiento = Area "almacenamiento" (sin Aduana).`;
+  N.textContent=`Mostrando ${nf.format(lim)} de ${nf.format(list.length)} SKUs. ${rbSrc==='A'?`Demanda = necesidad futura del ${tmES} (todos los archivos del plan cargados).`:`Demanda = suma de Q_Ordered por sync_Id del archivo${trFile?' ('+trFile+')':''}.`} Picking = stock de picking del último inventario. Almacenamiento = Area "almacenamiento" (sin Aduana).`;
 }
 function rbCsv(){
-  if(!trDem||!mm)return;
+  if(!mm||(rbSrc==='B'&&!trDem))return;
   const {out}=rbCalc();
   const L=['SKU ID;Nombre;Grupo;Demanda;Stock picking;Stock almacenamiento;Min VL;Max VL;Batch;Demanda vs Max (%);Reabasto;Motivo;Cantidad a cubrir;Cantidad en batch'];
   for(const r of out)L.push([r.s,`"${String(r.name).replace(/"/g,'""')}"`,r.grp,Math.round(r.d),Math.round(r.p),Math.round(r.a),r.min??'',r.max??'',r.emp||'',r.pct==null?'':nf1.format(r.pct),r.gen,`"${r.mot}"`,r.gen==='Sí'?Math.round(r.cub):'',r.gen==='Sí'?Math.round(r.enB):''].join(';'));
   const blob=new Blob(['﻿'+L.join('\n')],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`reabasto_${(trFecha||'hoy').replace(/\//g,'-')}.csv`;a.click();
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`reabasto_${rbSrc==='A'?tomorrowISO():(trFecha||'hoy').replace(/\//g,'-')}.csv`;a.click();
 }
 const dTR=$('#dropTR');
 ['dragenter','dragover'].forEach(ev=>dTR.addEventListener(ev,e=>{e.preventDefault();dTR.classList.add('over')}));
@@ -1123,6 +1141,7 @@ const dTR=$('#dropTR');
 dTR.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)loadTR(f)});
 $('#fiTR').onchange=e=>{const f=e.target.files[0];if(f)loadTR(f)};
 $('#rbF').onchange=()=>rbRender();
+$('#rbSrc').onchange=e=>{rbSrc=e.target.value;rbRender()};
 $('#rbCsv').onclick=rbCsv;
 // ---------- Simulador de reabastos ----------
 let simInit=false;
