@@ -36,7 +36,7 @@ def nueva_pagina(p):
 
 
 def login(page):
-    page.goto(URL, wait_until="networkidle")
+    page.goto(URL, wait_until="domcontentloaded", timeout=90_000)
     page.wait_for_timeout(1500)
     if "/login" not in page.url and not page.locator("input[type=password]").count():
         return  # ya hay sesión
@@ -49,7 +49,7 @@ def login(page):
         print("LOGIN FALLIDO. URL:", page.url)
         print("TEXTO:", page.inner_text("body")[:800].replace("\n", " | "))
         raise
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded", timeout=90_000)
     pass_secondary_screen(page)
 
 
