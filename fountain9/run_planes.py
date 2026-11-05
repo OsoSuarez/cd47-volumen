@@ -124,34 +124,69 @@ def go_replenishment(page):
 
 
 def create_plan(page, preset):
-    # El selector de vistas (.searchUserView) solo se muestra con :hover sobre el ícono verde,
-    # y ese hover no se reproduce de forma fiable desde Playwright. Forzamos el selector a estar
-    # siempre visible con una regla CSS propia y lo usamos directo, sin depender del cursor.
-    page.add_style_tag(content=".searchUserView { display: block !important; visibility: visible !important; opacity: 1 !important; }")
+    # El selector de vistas y su desplegable viven en el DOM pero ocultos (se muestran con :hover,
+    # que no se reproduce desde Playwright). Los forzamos visibles por CSS y vamos probando vías
+    # hasta que una seleccione el preset; cada paso deja constancia en la terminal.
+    page.add_style_tag(content="""
+        .searchUserView { display: block !important; visibility: visible !important; opacity: 1 !important; }
+        .ant-select-dropdown { display: block !important; visibility: visible !important; opacity: 1 !important; }
+    """)
+    page.wait_for_timeout(500)
     selector = page.locator(".searchUserView").first
-    selector.wait_for(state="visible", timeout=20_000)
-    # Abrimos el desplegable con la flecha del selector.
-    selector.locator(".ant-select-arrow").first.click(timeout=20_000)
-    page.wait_for_timeout(800)
-    # Elegimos el preset de la lista ya cargada.
-    opcion = page.locator(".ant-select-dropdown:visible .ant-select-item-option", has_text=preset).first
-    opcion.wait_for(state="visible", timeout=15_000)
-    opcion.click(timeout=20_000)
-    page.wait_for_timeout(1500)
-    # Verificamos que el selector quedó con el preset elegido antes de crear el plan.
-    elegido = selector.locator(".ant-select-selection-item").first.inner_text(timeout=10_000)
-    if elegido.strip() != preset:
-        raise RuntimeError(f"No se seleccionó el preset {preset!r}: el selector muestra {elegido!r}")
-    print(f"Preset seleccionado: {elegido.strip()}")
+
+    def elegido():
+        try:
+            return selector.locator(".ant-select-selection-item").first.inner_text(timeout=2_000).strip()
+        except Exception:
+            return ""
+
+    vias = []
+
+    # Vía 1: clic en la flecha y después en la opción, como se hace a mano.
+    def via_flecha():
+        selector.locator(".ant-select-arrow").first.click(timeout=10_000)
+        page.wait_for_timeout(800)
+        page.locator(".ant-select-item-option", has_text=preset).first.click(timeout=10_000)
+
+    # Vía 2: clic directo sobre la opción que ya está en el DOM, sin abrir nada.
+    def via_opcion_directa():
+        page.locator(".ant-select-item-option", has_text=preset).first.click(timeout=10_000, force=True)
+
+    # Vía 3: clic por JavaScript sobre el nodo de la opción (React escucha el evento igual).
+    def via_js():
+        ok = page.evaluate("""(txt) => {
+            const op = [...document.querySelectorAll('.ant-select-item-option')]
+                .find(e => (e.innerText || '').trim().includes(txt));
+            if (!op) return false;
+            for (const t of ['mousedown', 'mouseup', 'click'])
+                op.dispatchEvent(new MouseEvent(t, {bubbles: true, cancelable: true, view: window}));
+            return true;
+        }""", preset)
+        if not ok:
+            raise RuntimeError("no encontré la opción en el DOM")
+
+    for nombre, via in [("flecha", via_flecha), ("opción directa", via_opcion_directa), ("javascript", via_js)]:
+        try:
+            via()
+            page.wait_for_timeout(1500)
+            if elegido() == preset:
+                print(f"Preset seleccionado por vía '{nombre}': {preset}")
+                break
+            vias.append(f"{nombre}: el selector quedó en {elegido()!r}")
+        except Exception as e:
+            vias.append(f"{nombre}: {str(e).splitlines()[0][:120]}")
+    else:
+        print("Opciones visibles en el DOM:", page.evaluate(
+            "() => [...document.querySelectorAll('.ant-select-item-option')].map(e => (e.innerText||'').trim())"))
+        raise RuntimeError("Ninguna vía seleccionó el preset. Detalle: " + " | ".join(vias))
+
     page.locator("button.plan-create-button").first.click(timeout=20_000)
-    # Si aparece modal de confirmación, se acepta.
     page.wait_for_timeout(1500)
     modal = page.locator(".ant-modal:visible button.ant-btn-primary")
     if modal.count():
         modal.first.click()
     page.wait_for_timeout(3000)
     print(f"Plan disparado para {preset}")
-
 
 
 def download_last_two(page):
