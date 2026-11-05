@@ -236,16 +236,23 @@ def main():
 
 
 def filtrar_y_subir():
-    """Paso 3: filtra los CSV y los sube al dashboard."""
+    """Paso 3: filtra los CSV y los sube al dashboard de forma persistente.
+
+    - filtrar_csv.py      -> genera filtrado_secos_*.csv y filtrado_ryc_*.csv
+    - csv_to_base_json.py -> convierte los CSV al formato base.json del repo,
+                             hace commit y dispara el workflow de GitHub Actions
+                             para que el dashboard se regenere con los datos
+                             del plan permanentemente persistidos.
+    """
     import subprocess
     import sys
     scripts = pathlib.Path(__file__).parent
 
-    print("\n--- Filtrando CSV ---")
-    r = subprocess.run([sys.executable, str(scripts / "filtrar_csv.py")], check=True)
+    print("\n--- Paso 3a: Filtrando CSV (removiendo qty=0) ---")
+    subprocess.run([sys.executable, str(scripts / "filtrar_csv.py")], check=True)
 
-    print("\n--- Subiendo al dashboard ---")
-    subprocess.run([sys.executable, str(scripts / "subir_dashboard.py")], check=True)
+    print("\n--- Paso 3b: Convirtiendo CSV a base.json y subiendo al repo ---")
+    subprocess.run([sys.executable, str(scripts / "csv_to_base_json.py")], check=True)
 
 
 if __name__ == "__main__":
