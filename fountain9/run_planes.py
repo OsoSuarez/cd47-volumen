@@ -230,6 +230,7 @@ def main():
     with sync_playwright() as p:
         ctx, page = nueva_pagina(p)
         login(page)
+        go_replenishment(page)
         download_last_two(page)
         ctx.close()
 
