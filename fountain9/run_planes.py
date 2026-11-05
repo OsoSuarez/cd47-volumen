@@ -90,16 +90,15 @@ def go_replenishment(page):
 
 
 def create_plan(page, preset):
-    # El ícono de binoculares (arriba a la derecha) abre el panel de presets con un buscador.
-    # Se pasa el cursor sobre el ícono, se escribe el nombre del preset y se hace clic en el ítem.
-    page.locator("button:has(i.fa-binoculars), .fa-binoculars, [class*=binocul]").first.hover(timeout=20_000)
-    page.wait_for_timeout(1000)
-    buscador = page.locator("input:visible").last
-    buscador.click()
-    buscador.fill(preset)
+    # Flujo: pasar el cursor sobre el ícono verde (searchUserView), desplegar la flecha,
+    # hacer clic en el preset y después en Create Plan.
+    vista = page.locator(".searchUserView").first
+    vista.hover(timeout=20_000)
     page.wait_for_timeout(800)
-    page.get_by_text(preset, exact=True).first.click(timeout=20_000)
-    page.wait_for_timeout(500)
+    vista.locator(".ant-select-arrow").first.click(timeout=20_000)
+    page.wait_for_timeout(800)
+    page.locator(".ant-select-dropdown:visible li", has_text=preset).first.click(timeout=20_000)
+    page.wait_for_timeout(1000)
     page.locator("button.plan-create-button").first.click(timeout=20_000)
     # Si aparece modal de confirmación, se acepta.
     modal = page.locator(".ant-modal:visible button.ant-btn-primary")
