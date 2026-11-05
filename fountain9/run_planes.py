@@ -20,13 +20,19 @@ OUT = pathlib.Path("descargas")
 
 def login(page):
     page.goto(URL, wait_until="networkidle")
-    # Selectores del login sin validar: la sesión de Chrome ya estaba iniciada.
-    print("LOGIN: url", page.url, "| password inputs:", page.locator("input[type=password]").count())
-    if page.locator("input[type=password]").count():
-        page.locator("input[type=text], input[type=email], input[name=username]").first.fill(USER)
-        page.locator("input[type=password]").first.fill(PASS)
-        page.keyboard.press("Enter")
-        page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(1500)
+    if "/login" not in page.url and not page.locator("input[type=password]").count():
+        return  # ya hay sesión
+    page.locator("input[type=email]").first.fill(USER)
+    page.locator("input[type=password]").first.fill(PASS)
+    page.locator("button[type=submit]", has_text="Login").first.click()
+    try:
+        page.wait_for_url(lambda u: "/login" not in u, timeout=45_000)
+    except Exception:
+        print("LOGIN FALLIDO. URL:", page.url)
+        print("TEXTO:", page.inner_text("body")[:800].replace("\n", " | "))
+        raise
+    page.wait_for_load_state("networkidle")
 
 
 def dump_debug(page, name):
