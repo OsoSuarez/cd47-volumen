@@ -235,5 +235,19 @@ def main():
         ctx.close()
 
 
+def filtrar_y_subir():
+    """Paso 3: filtra los CSV y los sube al dashboard."""
+    import subprocess
+    import sys
+    scripts = pathlib.Path(__file__).parent
+
+    print("\n--- Filtrando CSV ---")
+    r = subprocess.run([sys.executable, str(scripts / "filtrar_csv.py")], check=True)
+
+    print("\n--- Subiendo al dashboard ---")
+    subprocess.run([sys.executable, str(scripts / "subir_dashboard.py")], check=True)
+
+
 if __name__ == "__main__":
     main()
+    filtrar_y_subir()
