@@ -160,9 +160,18 @@ def create_plan(page, preset, texto_opcion):
     # (puede haber quedado abierto del plan anterior).
     print("  paso: expandir Future Order Planning")
     if not page.get_by_role("switch").count():
-        # dispatch_event: la barra lateral intercepta el clic normal sobre el título.
-        page.get_by_text("Future Order Planning", exact=True).first.dispatch_event("click", timeout=20_000)
-        page.wait_for_timeout(1500)
+        # Lo que escucha el clic es el botón que envuelve el título y la flecha, no el título.
+        # Nombre por coincidencia parcial: varía según si está abierto o cerrado.
+        boton = page.get_by_role("button", name=re.compile("Future Order"))
+        if boton.count():
+            boton.first.dispatch_event("click", timeout=20_000)
+        else:
+            print("  No encontré el botón de Future Order. Botones en pantalla:",
+                  page.evaluate("() => [...document.querySelectorAll('button')]"
+                                ".map(b => (b.getAttribute('aria-label') || b.innerText || '').trim())"
+                                ".filter(Boolean).slice(0, 40)"))
+            raise RuntimeError("No pude expandir Future Order Planning")
+        page.wait_for_timeout(2000)
     page.get_by_role("switch").first.wait_for(state="visible", timeout=20_000)
     # Lo mismo con los switches: solo los tocamos si no están ya encendidos, para no apagarlos.
     print("  paso: switches")
