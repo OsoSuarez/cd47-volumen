@@ -40,14 +40,16 @@ def main():
         print("Abriendo dashboard...")
         page.goto(DASHBOARD_URL, wait_until="networkidle", timeout=30_000)
 
-        # Verificar que el input existe
-        page.wait_for_selector("#fi", timeout=10_000)
+        # Verificar que el input existe (puede estar hidden — OK para set_input_files)
+        page.wait_for_selector("#fi", state="attached", timeout=10_000)
         print("Dashboard cargado. Subiendo archivos...")
 
-        # Usar set_input_files — Playwright maneja la lectura del archivo local
-        # sin ningún problema de CORS o mixed content
+        # set_input_files funciona con inputs hidden; no necesita que sea visible
         file_input = page.locator("#fi")
-        file_input.set_input_files([str(secos_path), str(ryc_path)])
+        file_input.set_input_files(
+            [str(secos_path), str(ryc_path)],
+            no_wait_after=True,
+        )
 
         # Esperar a que el dashboard procese los archivos
         # El dashboard muestra el nombre del archivo en el Muelle de Carga
