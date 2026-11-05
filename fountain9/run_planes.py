@@ -21,6 +21,7 @@ OUT = pathlib.Path("descargas")
 def login(page):
     page.goto(URL, wait_until="networkidle")
     # Selectores del login sin validar: la sesión de Chrome ya estaba iniciada.
+    print("LOGIN: url", page.url, "| password inputs:", page.locator("input[type=password]").count())
     if page.locator("input[type=password]").count():
         page.locator("input[type=text], input[type=email], input[name=username]").first.fill(USER)
         page.locator("input[type=password]").first.fill(PASS)
@@ -41,6 +42,11 @@ def go_replenishment(page):
         page.get_by_text("Replenishment / Transfer Orders").click(timeout=20_000)
     except Exception:
         dump_debug(page, "sin_menu_replenishment")
+        # Volcado a la consola del workflow (los artefactos no siempre se pueden bajar).
+        print("URL:", page.url)
+        print("TITULO:", page.title())
+        print("TEXTO:", page.inner_text("body")[:1500].replace("\n", " | "))
+        print("INPUTS:", page.evaluate("() => [...document.querySelectorAll('input,button')].slice(0,40).map(e => [e.tagName, e.type, e.name, e.placeholder, (e.innerText||'').slice(0,30)].join(' '))"))
         raise
     page.wait_for_timeout(2000)
 
