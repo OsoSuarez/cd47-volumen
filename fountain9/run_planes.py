@@ -146,16 +146,16 @@ def create_plan(page, preset):
     def via_flecha():
         selector.locator(".ant-select-arrow").first.click(timeout=10_000)
         page.wait_for_timeout(800)
-        page.locator(".ant-select-item-option", has_text=preset).first.click(timeout=10_000)
+        page.locator(".ant-select-dropdown li", has_text=preset).first.click(timeout=10_000)
 
     # Vía 2: clic directo sobre la opción que ya está en el DOM, sin abrir nada.
     def via_opcion_directa():
-        page.locator(".ant-select-item-option", has_text=preset).first.click(timeout=10_000, force=True)
+        page.locator(".ant-select-dropdown li", has_text=preset).first.click(timeout=10_000, force=True)
 
     # Vía 3: clic por JavaScript sobre el nodo de la opción (React escucha el evento igual).
     def via_js():
         ok = page.evaluate("""(txt) => {
-            const op = [...document.querySelectorAll('.ant-select-item-option')]
+            const op = [...document.querySelectorAll('.ant-select-dropdown li')]
                 .find(e => (e.innerText || '').trim().includes(txt));
             if (!op) return false;
             for (const t of ['mousedown', 'mouseup', 'click'])
@@ -169,7 +169,7 @@ def create_plan(page, preset):
     def via_posicion():
         pos = len(PRESETS) - PRESETS.index(preset)  # 2 = anteúltimo, 1 = último
         ok = page.evaluate("""([n]) => {
-            const ops = [...document.querySelectorAll('.ant-select-item-option')];
+            const ops = [...document.querySelectorAll('.ant-select-dropdown li')];
             const op = ops[ops.length - n];
             if (!op) return false;
             for (const t of ['mousedown', 'mouseup', 'click'])
@@ -192,7 +192,7 @@ def create_plan(page, preset):
             vias.append(f"{nombre}: {str(e).splitlines()[0][:120]}")
     else:
         print("Opciones visibles en el DOM:", page.evaluate(
-            "() => [...document.querySelectorAll('.ant-select-item-option')].map(e => (e.innerText||'').trim())"))
+            "() => [...document.querySelectorAll('.ant-select-dropdown li')].map(e => (e.innerText||'').trim())"))
         raise RuntimeError("Ninguna vía seleccionó el preset. Detalle: " + " | ".join(vias))
 
     page.locator("button.plan-create-button").first.click(timeout=20_000)
