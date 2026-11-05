@@ -145,6 +145,7 @@ def create_plan(page, preset, texto_opcion):
     cerrar_avisos(page)
     # El bloque del selector solo se muestra con :hover sobre el ícono verde, y ese hover no se
     # reproduce desde Playwright. Lo forzamos visible por CSS y después clic directo al combobox.
+    print("  paso: abrir selector de vistas")
     page.add_style_tag(content=".searchUserView { display: block !important; visibility: visible !important; opacity: 1 !important; }")
     page.wait_for_timeout(600)
     page.locator(".searchUserView").get_by_role("combobox").first.click(timeout=20_000)
@@ -157,22 +158,28 @@ def create_plan(page, preset, texto_opcion):
     dia = (date.today() + timedelta(days=7)).day
     # Expandimos Future Order Planning solo si los switches todavía no están a la vista
     # (puede haber quedado abierto del plan anterior).
+    print("  paso: expandir Future Order Planning")
     if not page.get_by_role("switch").count():
         page.get_by_text("Future Order Planning", exact=True).first.click(timeout=20_000)
         page.wait_for_timeout(1500)
     page.get_by_role("switch").first.wait_for(state="visible", timeout=20_000)
     # Lo mismo con los switches: solo los tocamos si no están ya encendidos, para no apagarlos.
+    print("  paso: switches")
     for i in range(2):
         sw = page.get_by_role("switch").nth(i)
         if sw.get_attribute("aria-checked") != "true":
             sw.click(timeout=20_000)
             page.wait_for_timeout(500)
+    print(f"  paso: fecha de simulacion (dia {dia})")
     page.get_by_role("textbox", name="Select date").click(timeout=20_000)
-    page.wait_for_timeout(800)
-    page.get_by_text(str(dia), exact=True).click(timeout=20_000)
+    page.wait_for_timeout(1000)
+    # Acotado al calendario: un get_by_text suelto matchea cualquier numero de la pagina.
+    calendario = page.locator(".ant-calendar-date, .ant-picker-cell-inner")
+    calendario.filter(has_text=re.compile(rf"^{dia}$")).first.click(timeout=20_000)
     page.wait_for_timeout(1000)
     print(f"Fecha de simulación: día {dia}")
 
+    print("  paso: Create Plan")
     page.get_by_role("button", name="Create Plan").click(timeout=20_000)
     page.wait_for_timeout(1500)
     page.get_by_role("dialog").get_by_role("button", name="Create Plan").click(timeout=20_000)
