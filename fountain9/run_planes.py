@@ -127,7 +127,19 @@ def create_plan(page, preset):
     page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2, steps=10)
     page.wait_for_timeout(500)
     selector = page.locator(".searchUserView").first
-    selector.wait_for(state="visible", timeout=10_000)  # aparece al pasar el cursor
+    # El selector solo aparece con el cursor real sobre el icono. Reintentamos el movimiento
+    # y dejamos en la terminal dónde está el icono, para diagnosticar si no llega.
+    visible = False
+    for intento in range(5):
+        box = icono.bounding_box()
+        print(f"Icono verde en {box} (intento {intento + 1})")
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2, steps=5)
+        page.wait_for_timeout(700)
+        if selector.is_visible():
+            visible = True
+            break
+    if not visible:
+        raise RuntimeError(f"El selector verde no se desplegó con el cursor sobre el icono. Icono en {icono.bounding_box()}")
     # Elegimos el preset por teclado: el mouse no llega a abrir el desplegable.
     # Enfocamos el campo de búsqueda del selector, escribimos el nombre y confirmamos con Enter.
     page.evaluate("() => document.querySelector('.searchUserView input').focus()")
