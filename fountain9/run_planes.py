@@ -147,6 +147,14 @@ def create_plan(page, preset):
             visible = True
             break
     if not visible:
+        # Diagnóstico: qué elemento queda realmente debajo del centro del icono, y el estado del selector.
+        b = icono.bounding_box()
+        cx, cy = b["x"] + b["width"] / 2, b["y"] + b["height"] / 2
+        print("Diagnóstico, elemento bajo el centro del icono:", page.evaluate(
+            "([x, y]) => { const e = document.elementFromPoint(x, y); return e ? e.tagName + '.' + String(e.className).slice(0, 80) : null }",
+            [cx, cy]))
+        print("Diagnóstico, display del selector:", page.evaluate(
+            "() => { const s = document.querySelector('.searchUserView'); return s ? getComputedStyle(s).display : 'no existe' }"))
         raise RuntimeError(f"El selector verde no se desplegó con el cursor sobre el icono. Icono en {icono.bounding_box()}")
     # Igual que a mano: con el selector visible, clic real en la flecha para expandirlo.
     # La flecha queda debajo del icono, a 64 px de su borde superior y centrada en su eje.
