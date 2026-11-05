@@ -13,6 +13,8 @@ import sys
 
 from playwright.sync_api import sync_playwright
 
+URL = "https://rappi-ar.kronoscope.fountain9.com/"
+
 OUT = pathlib.Path("descargas")
 
 
@@ -23,6 +25,15 @@ def abrir(p):
     browser = p.chromium.connect_over_cdp(cdp)
     ctx = browser.contexts[0]
     return ctx.pages[0] if ctx.pages else ctx.new_page()
+
+
+def go_replenishment(page):
+    page.locator("i.fa-cart-plus").first.wait_for(state="attached", timeout=60_000)
+    page.locator("i.fa-cart-plus").first.dispatch_event("click", timeout=20_000)
+    page.wait_for_timeout(2500)
+    page.get_by_text("Replenishment / Transfer Orders").click(timeout=20_000)
+    page.wait_for_timeout(2500)
+    print("En Replenishment / Transfer Orders")
 
 
 def descargar(page, n):
@@ -62,7 +73,9 @@ def descargar(page, n):
 def main():
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 1
     with sync_playwright() as p:
-        descargar(abrir(p), n)
+        page = abrir(p)
+        go_replenishment(page)
+        descargar(page, n)
 
 
 if __name__ == "__main__":
