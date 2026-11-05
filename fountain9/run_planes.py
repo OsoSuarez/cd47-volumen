@@ -18,6 +18,14 @@ WAIT_SECONDS = 16 * 60
 OUT = pathlib.Path("descargas")
 
 
+def lanzar(p):
+    # F9_CHANNEL=chrome usa el Chrome instalado en la PC (con tu perfil de uso normal).
+    # F9_HEADLESS=0 muestra la ventana.
+    channel = os.environ.get("F9_CHANNEL") or None
+    headless = os.environ.get("F9_HEADLESS", "1") != "0"
+    return p.chromium.launch(channel=channel, headless=headless)
+
+
 def login(page):
     page.goto(URL, wait_until="networkidle")
     page.wait_for_timeout(1500)
@@ -107,7 +115,7 @@ def download_last_two(page):
 def main():
     OUT.mkdir(exist_ok=True)
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = lanzar(p)
         page = browser.new_context(accept_downloads=True).new_page()
         login(page)
         go_replenishment(page)
@@ -119,7 +127,7 @@ def main():
     time.sleep(WAIT_SECONDS)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = lanzar(p)
         page = browser.new_context(accept_downloads=True).new_page()
         login(page)
         download_last_two(page)
