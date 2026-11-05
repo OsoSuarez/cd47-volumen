@@ -102,10 +102,17 @@ def go_replenishment(page):
 def create_plan(page, preset):
     # Flujo: pasar el cursor sobre el ícono verde (searchUserView), desplegar la flecha,
     # hacer clic en el preset y después en Create Plan.
-    icono = page.locator(".userSpecificView").first  # ícono verde (User View)
+    # Hay dos elementos userSpecificView: se usa el que está más a la derecha (el ícono verde).
+    idx = page.evaluate("""() => {
+        const els = [...document.querySelectorAll('.userSpecificView')];
+        let best = 0, bx = -1;
+        els.forEach((e, i) => { const r = e.getBoundingClientRect(); if (r.left > bx) { bx = r.left; best = i; } });
+        return best;
+    }""")
+    icono = page.locator(".userSpecificView").nth(idx)
     icono.hover(timeout=20_000)
-    page.wait_for_timeout(800)
-    selector = page.locator(".searchUserView").first  # aparece al pasar el cursor
+    selector = page.locator(".searchUserView").first
+    selector.wait_for(state="visible", timeout=10_000)  # aparece al pasar el cursor
     selector.locator(".ant-select-arrow").first.click(timeout=20_000)
     page.wait_for_timeout(800)
     page.locator(".ant-select-dropdown:visible li", has_text=preset).first.click(timeout=20_000)
