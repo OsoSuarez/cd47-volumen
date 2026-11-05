@@ -118,6 +118,19 @@ def go_replenishment(page):
     print("En Replenishment / Transfer Orders")
 
 
+def cerrar_avisos(page):
+    # El cartel "Plan is being generated in the background" queda abierto y tapa los controles.
+    for sel in [".ant-notification-notice-close", ".ant-alert-close-icon",
+                ".ant-message-notice .anticon-close", ".ant-modal-close"]:
+        cajas = page.locator(f"{sel}:visible")
+        for i in range(cajas.count()):
+            try:
+                cajas.nth(i).click(timeout=3_000)
+                page.wait_for_timeout(300)
+            except Exception:
+                pass
+
+
 def esperar_carga(page, timeout=120_000):
     # Tras crear un plan la página queda con un spinner (.clipLoader) que tapa los controles.
     try:
@@ -129,6 +142,7 @@ def esperar_carga(page, timeout=120_000):
 
 def create_plan(page, preset, texto_opcion):
     esperar_carga(page)
+    cerrar_avisos(page)
     # El bloque del selector solo se muestra con :hover sobre el ícono verde, y ese hover no se
     # reproduce desde Playwright. Lo forzamos visible por CSS y después clic directo al combobox.
     page.add_style_tag(content=".searchUserView { display: block !important; visibility: visible !important; opacity: 1 !important; }")
