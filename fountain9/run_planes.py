@@ -107,9 +107,15 @@ def dump_debug(page, name):
 
 
 def go_replenishment(page):
-    # Selectores tomados de una grabación del flujo manual (playwright codegen).
-    page.get_by_role("tablist").filter(has_text="PurchaseReplenishment /").click(timeout=30_000)
+    # Primero el carrito de la barra lateral (abre el módulo de compras/reabasto).
+    # dispatch_event evita que la barra lateral intercepte el clic.
+    page.locator("i.fa-cart-plus").first.wait_for(state="attached", timeout=60_000)
+    page.locator("i.fa-cart-plus").first.dispatch_event("click", timeout=20_000)
     page.wait_for_timeout(2500)
+    # Después la pestaña horizontal.
+    page.get_by_text("Replenishment / Transfer Orders").click(timeout=20_000)
+    page.wait_for_timeout(2500)
+    print("En Replenishment / Transfer Orders")
 
 
 def create_plan(page, preset, texto_opcion):
