@@ -1,0 +1,32 @@
+name: Fountain9 planes de reabasto
+
+on:
+  workflow_dispatch:
+  # Pendiente: activar cuando el flujo esté probado.
+  # schedule:
+  #   - cron: '0 10 * * *'   # hora a confirmar (UTC)
+
+jobs:
+  planes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar Playwright
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Crear planes, esperar y descargar CSV
+        env:
+          F9_USER: ${{ secrets.F9_USER }}
+          F9_PASS: ${{ secrets.F9_PASS }}
+        run: python3 fountain9/run_planes.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: planes-fountain9
+          path: descargas/
+          if-no-files-found: warn
