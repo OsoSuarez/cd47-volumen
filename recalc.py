@@ -166,6 +166,10 @@ if os.path.exists(os.path.join(DATOS, 'V L.csv')):
     print('V L: %d SKUs' % len(json.loads(vl)))
 else:
     vl = open(os.path.join(HERE, 'vl.json'), encoding='utf-8').read()
+from datetime import datetime
+from zoneinfo import ZoneInfo
+RUN_AT = datetime.now(ZoneInfo('America/Argentina/Buenos_Aires')).strftime('%d/%m/%Y %H:%M')
+tpl = tpl.replace('__RUN_AT__', RUN_AT)
 out = tpl.replace('__BASE__', base).replace('__VL__', vl)
 with open(os.path.join(HERE, 'volumen_futuro.html'), 'w', encoding='utf-8') as f:
     f.write(out)
