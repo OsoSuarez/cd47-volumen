@@ -109,12 +109,19 @@ def create_plan(page, preset):
     # Flujo: pasar el cursor sobre el ícono verde (searchUserView), desplegar la flecha,
     # hacer clic en el preset y después en Create Plan.
     # Hay dos elementos userSpecificView: se usa el que está más a la derecha (el ícono verde).
+    # Elegimos el ícono que realmente está al frente en su centro (no uno tapado por la barra de pestañas).
     idx = page.evaluate("""() => {
         const els = [...document.querySelectorAll('.userSpecificView')];
-        let best = 0, bx = -1;
-        els.forEach((e, i) => { const r = e.getBoundingClientRect(); if (r.left > bx) { bx = r.left; best = i; } });
-        return best;
+        for (let i = 0; i < els.length; i++) {
+            const r = els[i].getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) continue;
+            const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            if (top && (top === els[i] || els[i].contains(top))) return i;
+        }
+        return -1;
     }""")
+    if idx < 0:
+        raise RuntimeError("No encontré el ícono verde al frente en la página (¿la ventana está maximizada?)")
     icono = page.locator(".userSpecificView").nth(idx)
     icono.scroll_into_view_if_needed(timeout=20_000)
     # El selector verde solo aparece con :hover real, así que movemos el cursor de verdad.
