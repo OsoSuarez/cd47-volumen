@@ -212,7 +212,7 @@ def push_to_github(base_obj):
     # Clonar repo en tmp
     tmp_dir = pathlib.Path(tempfile.mkdtemp(prefix="cd47_"))
     print(f"Clonando repo en {tmp_dir} ...")
-    subprocess.run(["gh", "repo", "clone", "OsoSuarez/cd47-volumen", str(tmp_dir)],
+    subprocess.run(["git", "clone", "https://github.com/OsoSuarez/cd47-volumen.git", str(tmp_dir)],
                    check=True, capture_output=True)
 
     # Escribir base.json
@@ -233,10 +233,14 @@ def push_to_github(base_obj):
     subprocess.run(["git", "-C", str(tmp_dir), "push"], check=True)
     print("✓ Push exitoso")
 
-    # Disparar workflow
+    # Disparar workflow via REST API (funciona sin GraphQL)
     print("\nDisparando workflow actualizar.yml ...")
-    subprocess.run(["gh", "workflow", "run", "actualizar.yml",
-                    "--repo", "OsoSuarez/cd47-volumen"], check=True)
+    subprocess.run([
+        "gh", "api",
+        "/repos/OsoSuarez/cd47-volumen/actions/workflows/407418201/dispatches",
+        "--method", "POST",
+        "--field", "ref=main",
+    ], check=True, capture_output=True)
     print("✓ Workflow disparado — el dashboard se regenerará en ~2 min")
 
     # Limpiar
