@@ -9,13 +9,13 @@ Uso:
 """
 import pathlib
 import sys
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 
 OUT = pathlib.Path("descargas")
 COL_FILTRO = "Replenishment(Allocation) Quantity for Plan Duration Editable"
-HOY = date.today().strftime("%Y_%m_%d")
+AHORA = datetime.now().strftime("%Y_%m_%d_%H_%M")
 
 
 def leer_csv(path: pathlib.Path) -> pd.DataFrame:
@@ -48,7 +48,7 @@ def main():
     df = pd.concat([df_secos, df_ryc], ignore_index=True)
     print(f"\nTotal combinado: {len(df):,} filas")
 
-    destino = OUT / f"volumen_futuro_{HOY}.xlsx"
+    destino = OUT / f"volumen_futuro_{AHORA}.xlsx"
     print(f"\nGenerando {destino.name}...")
     with pd.ExcelWriter(destino, engine="openpyxl") as writer:
         df_secos.to_excel(writer, sheet_name="Secos", index=False)
