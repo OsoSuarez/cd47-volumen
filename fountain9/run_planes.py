@@ -165,7 +165,22 @@ def create_plan(page, preset):
         if not ok:
             raise RuntimeError("no encontré la opción en el DOM")
 
-    for nombre, via in [("flecha", via_flecha), ("opción directa", via_opcion_directa), ("javascript", via_js)]:
+    # Vía 4: por posición. Los dos presets que usamos son el anteúltimo y el último de la lista.
+    def via_posicion():
+        pos = len(PRESETS) - PRESETS.index(preset)  # 2 = anteúltimo, 1 = último
+        ok = page.evaluate("""([n]) => {
+            const ops = [...document.querySelectorAll('.ant-select-item-option')];
+            const op = ops[ops.length - n];
+            if (!op) return false;
+            for (const t of ['mousedown', 'mouseup', 'click'])
+                op.dispatchEvent(new MouseEvent(t, {bubbles: true, cancelable: true, view: window}));
+            return true;
+        }""", [pos])
+        if not ok:
+            raise RuntimeError("no hay opciones en el DOM")
+
+    for nombre, via in [("flecha", via_flecha), ("opción directa", via_opcion_directa),
+                        ("javascript", via_js), ("posición", via_posicion)]:
         try:
             via()
             page.wait_for_timeout(1500)
