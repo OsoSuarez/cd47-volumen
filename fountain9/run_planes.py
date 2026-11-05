@@ -124,95 +124,34 @@ def go_replenishment(page):
 
 
 def create_plan(page, preset):
-    # Flujo: pasar el cursor sobre el ícono verde (searchUserView), desplegar la flecha,
-    # hacer clic en el preset y después en Create Plan.
-    # Hay dos elementos userSpecificView: se usa el que está más a la derecha (el ícono verde).
-    # Elegimos el ícono que realmente está al frente en su centro (no uno tapado por la barra de pestañas).
-    idx = page.evaluate("""() => {
-        const els = [...document.querySelectorAll('.userSpecificView')];
-        for (let i = 0; i < els.length; i++) {
-            const r = els[i].getBoundingClientRect();
-            if (r.width === 0 || r.height === 0) continue;
-            const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-            if (top && (top === els[i] || els[i].contains(top))) return i;
-        }
-        return -1;
-    }""")
-    if idx < 0:
-        raise RuntimeError("No encontré el ícono verde al frente en la página (¿la ventana está maximizada?)")
-    icono = page.locator(".userSpecificView").nth(idx)
-    icono.scroll_into_view_if_needed(timeout=20_000)
-    # El selector verde solo aparece con :hover real, así que movemos el cursor de verdad.
-    # Primero pasamos por la barra de pestañas (el panel activo puede tapar el ícono) y después al ícono.
-    box = icono.bounding_box()
-    tabs = page.locator(".ant-tabs-nav").first.bounding_box()
-    if tabs:
-        page.mouse.move(tabs["x"] + tabs["width"] / 2, tabs["y"] + tabs["height"] / 2)
-        page.wait_for_timeout(300)
-    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2, steps=10)
-    page.wait_for_timeout(500)
+    # El selector de vistas (.searchUserView) solo se muestra con :hover sobre el ícono verde,
+    # y ese hover no se reproduce de forma fiable desde Playwright. Forzamos el selector a estar
+    # siempre visible con una regla CSS propia y lo usamos directo, sin depender del cursor.
+    page.add_style_tag(content=".searchUserView { display: block !important; visibility: visible !important; opacity: 1 !important; }")
     selector = page.locator(".searchUserView").first
-    # El selector solo aparece con el cursor real sobre el icono. Reintentamos el movimiento
-    # y dejamos en la terminal dónde está el icono, para diagnosticar si no llega.
-    visible = False
-    for intento in range(5):
-        box = icono.bounding_box()
-        print(f"Icono verde en {box} (intento {intento + 1})")
-        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2, steps=5)
-        page.wait_for_timeout(700)
-        if selector.is_visible():
-            visible = True
-            break
-    if not visible:
-        # Diagnóstico: qué elemento queda realmente debajo del centro del icono, y el estado del selector.
-        b = icono.bounding_box()
-        cx, cy = b["x"] + b["width"] / 2, b["y"] + b["height"] / 2
-        print("Diagnóstico, elemento bajo el centro del icono:", page.evaluate(
-            "([x, y]) => { const e = document.elementFromPoint(x, y); return e ? e.tagName + '.' + String(e.className).slice(0, 80) : null }",
-            [cx, cy]))
-        print("Diagnóstico, display del selector:", page.evaluate(
-            "() => { const s = document.querySelector('.searchUserView'); return s ? getComputedStyle(s).display : 'no existe' }"))
-        print("Diagnóstico, ventana con foco:", page.evaluate("() => document.hasFocus()"))
-        # Probamos disparar eventos de entrada sobre el contenedor del icono y miramos si el selector se muestra.
-        for evento in ["pointerenter", "mouseenter", "mouseover"]:
-            page.evaluate(
-                "([x, y, ev]) => { const e = document.elementFromPoint(x, y); if (!e) return;"
-                " const c = e.closest('.userSpecificView, .floating-button') || e;"
-                " c.dispatchEvent(new Event(ev, {bubbles: true})); }",
-                [cx, cy, evento])
-            page.wait_for_timeout(400)
-            print(f"Diagnóstico, tras {evento}:", page.evaluate(
-                "() => { const s = document.querySelector('.searchUserView'); return s ? getComputedStyle(s).display : 'no existe' }"))
-        raise RuntimeError(f"El selector verde no se desplegó con el cursor sobre el icono. Icono en {icono.bounding_box()}")
-    # Igual que a mano: con el selector visible, clic real en la flecha para expandirlo.
-    # La flecha queda debajo del icono, a 64 px de su borde superior y centrada en su eje.
-    # Bajamos en línea recta desde el icono para no salir de la zona del selector.
-    cx = box["x"] + box["width"] / 2
-    cy = box["y"] + 64
-    page.mouse.move(cx, cy, steps=8)
-    page.wait_for_timeout(300)
-    page.mouse.click(cx, cy)
+    selector.wait_for(state="visible", timeout=20_000)
+    # Abrimos el desplegable con la flecha del selector.
+    selector.locator(".ant-select-arrow").first.click(timeout=20_000)
     page.wait_for_timeout(800)
-    # Si la flecha no abrió el desplegable, respaldo por teclado: enfocamos el campo,
-    # escribimos el nombre del preset y confirmamos con Enter.
-    page.evaluate("() => document.querySelector('.searchUserView input').focus()")
-    page.wait_for_timeout(300)
-    page.keyboard.press("ArrowDown")
-    page.wait_for_timeout(800)
-    page.keyboard.type(preset, delay=40)
-    page.wait_for_timeout(800)
-    page.keyboard.press("Enter")
-    page.wait_for_timeout(1000)
+    # Elegimos el preset de la lista ya cargada.
+    opcion = page.locator(".ant-select-dropdown:visible .ant-select-item-option", has_text=preset).first
+    opcion.wait_for(state="visible", timeout=15_000)
+    opcion.click(timeout=20_000)
+    page.wait_for_timeout(1500)
     # Verificamos que el selector quedó con el preset elegido antes de crear el plan.
-    elegido = selector.locator(".ant-select-selection-item").first.inner_text(timeout=5_000)
+    elegido = selector.locator(".ant-select-selection-item").first.inner_text(timeout=10_000)
     if elegido.strip() != preset:
-        raise RuntimeError(f"No se seleccionó el preset: el selector muestra {elegido!r}")
+        raise RuntimeError(f"No se seleccionó el preset {preset!r}: el selector muestra {elegido!r}")
+    print(f"Preset seleccionado: {elegido.strip()}")
     page.locator("button.plan-create-button").first.click(timeout=20_000)
     # Si aparece modal de confirmación, se acepta.
+    page.wait_for_timeout(1500)
     modal = page.locator(".ant-modal:visible button.ant-btn-primary")
     if modal.count():
         modal.first.click()
     page.wait_for_timeout(3000)
+    print(f"Plan disparado para {preset}")
+
 
 
 def download_last_two(page):
