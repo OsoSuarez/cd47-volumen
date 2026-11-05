@@ -18,7 +18,24 @@ WAIT_SECONDS = 16 * 60
 OUT = pathlib.Path("descargas")
 
 
+class _SinCierre:
+    # Envoltorio para el Chrome conectado por CDP: no lo cerramos al terminar cada etapa.
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    def close(self):
+        pass
+
+
 def nueva_pagina(p):
+    # F9_CDP_URL: se conecta a un Chrome que ya está abierto con depuración remota
+    # (por ejemplo http://localhost:9222). Así el hover lo maneja el navegador real.
+    cdp = os.environ.get("F9_CDP_URL")
+    if cdp:
+        browser = p.chromium.connect_over_cdp(cdp)
+        ctx = browser.contexts[0]
+        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        return _SinCierre(ctx), page
     # F9_PERFIL: carpeta donde se guarda la sesión de Chrome (se resuelve el captcha una vez).
     # F9_CHANNEL=chrome usa el Chrome instalado. F9_HEADLESS=0 muestra la ventana.
     channel = os.environ.get("F9_CHANNEL") or None
