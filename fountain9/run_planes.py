@@ -103,6 +103,9 @@ def go_replenishment(page):
         print("INPUTS:", page.evaluate("() => [...document.querySelectorAll('input,button')].slice(0,40).map(e => [e.tagName, e.type, e.name, e.placeholder, (e.innerText||'').slice(0,30)].join(' '))"))
         raise
     page.wait_for_timeout(2000)
+    # Zoom 80%: así la página queda con las mismas posiciones que en el Chrome manual.
+    page.evaluate("() => { document.body.style.zoom = '0.8'; }")
+    page.wait_for_timeout(500)
 
 
 def create_plan(page, preset):
