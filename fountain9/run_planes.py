@@ -160,7 +160,8 @@ def create_plan(page, preset, texto_opcion):
     # (puede haber quedado abierto del plan anterior).
     print("  paso: expandir Future Order Planning")
     if not page.get_by_role("switch").count():
-        page.get_by_text("Future Order Planning", exact=True).first.click(timeout=20_000)
+        # dispatch_event: la barra lateral intercepta el clic normal sobre el título.
+        page.get_by_text("Future Order Planning", exact=True).first.dispatch_event("click", timeout=20_000)
         page.wait_for_timeout(1500)
     page.get_by_role("switch").first.wait_for(state="visible", timeout=20_000)
     # Lo mismo con los switches: solo los tocamos si no están ya encendidos, para no apagarlos.
