@@ -7,13 +7,18 @@ import os
 import re
 import pathlib
 import time
+from datetime import date, timedelta
 
 from playwright.sync_api import sync_playwright
 
 URL = "https://rappi-ar.kronoscope.fountain9.com/"
 USER = os.environ["F9_USER"]
 PASS = os.environ["F9_PASS"]
-PRESETS = ["TR_CD47_ID_Secos_No TOO-Room Temp", "TR_CD47_RyC"]
+PRESETS = [
+    # (nombre del preset, texto con el que aparece en la lista desplegable)
+    ("TR_CD47_ID_Secos_No TOO-Room Temp", "TR_CD47_ID_Secos_No TOO-Room"),
+    ("TR_CD47_RyC", "TR_CD47_RyC"),
+]
 WAIT_SECONDS = 16 * 60
 OUT = pathlib.Path("descargas")
 
@@ -102,104 +107,34 @@ def dump_debug(page, name):
 
 
 def go_replenishment(page):
-    # Tras el login se abre el dashboard de pronóstico. El módulo de compras/reabasto
-    # está en la barra lateral con el ícono fa-cart-plus.
-    # Esperamos a que la barra lateral esté visible antes de tocar nada (ventana maximizada).
-    page.locator("i.fa-cart-plus").first.wait_for(state="attached", timeout=60_000)
-    # dispatch_event evita que la barra lateral tape el clic (intercepta eventos del puntero).
-    page.locator("i.fa-cart-plus").first.dispatch_event("click", timeout=20_000)
-    page.wait_for_timeout(1500)
-    try:
-        page.get_by_text("Replenishment / Transfer Orders").click(timeout=20_000)
-    except Exception:
-        dump_debug(page, "sin_menu_replenishment")
-        # Volcado a la consola del workflow (los artefactos no siempre se pueden bajar).
-        print("URL:", page.url)
-        print("TITULO:", page.title())
-        print("TEXTO:", page.inner_text("body")[:1500].replace("\n", " | "))
-        print("INPUTS:", page.evaluate("() => [...document.querySelectorAll('input,button')].slice(0,40).map(e => [e.tagName, e.type, e.name, e.placeholder, (e.innerText||'').slice(0,30)].join(' '))"))
-        raise
+    # Selectores tomados de una grabación del flujo manual (playwright codegen).
+    page.get_by_role("tablist").filter(has_text="PurchaseReplenishment /").click(timeout=30_000)
+    page.wait_for_timeout(2500)
+
+
+def create_plan(page, preset, texto_opcion):
+    # El selector de vistas es un combobox: se abre con un clic directo, sin hover.
+    page.get_by_role("combobox").filter(has_text="Select the view").click(timeout=20_000)
+    page.wait_for_timeout(1000)
+    page.get_by_text(texto_opcion).click(timeout=20_000)
     page.wait_for_timeout(2000)
-    # El zoom de la página se fija a mano una vez en el perfil del bot (F9_PERFIL), en 80%.
+    print(f"Preset seleccionado: {preset}")
 
+    # Fecha de simulación: hoy + 7 días (en la grabación, el 12 estando a 5 de noviembre).
+    dia = (date.today() + timedelta(days=7)).day
+    page.get_by_role("button", name="icon: right Future Order").click(timeout=20_000)
+    page.wait_for_timeout(1000)
+    page.get_by_role("switch").first.click(timeout=20_000)
+    page.get_by_role("switch").nth(1).click(timeout=20_000)
+    page.get_by_role("textbox", name="Select date").click(timeout=20_000)
+    page.wait_for_timeout(800)
+    page.get_by_text(str(dia), exact=True).click(timeout=20_000)
+    page.wait_for_timeout(1000)
+    print(f"Fecha de simulación: día {dia}")
 
-def create_plan(page, preset):
-    # El selector de vistas y su desplegable viven en el DOM pero ocultos (se muestran con :hover,
-    # que no se reproduce desde Playwright). Los forzamos visibles por CSS y vamos probando vías
-    # hasta que una seleccione el preset; cada paso deja constancia en la terminal.
-    page.add_style_tag(content="""
-        .searchUserView { display: block !important; visibility: visible !important; opacity: 1 !important; }
-        .ant-select-dropdown { display: block !important; visibility: visible !important; opacity: 1 !important; }
-    """)
-    page.wait_for_timeout(500)
-    selector = page.locator(".searchUserView").first
-
-    def elegido():
-        try:
-            return selector.locator(".ant-select-selection-item").first.inner_text(timeout=2_000).strip()
-        except Exception:
-            return ""
-
-    vias = []
-
-    # Vía 1: clic en la flecha y después en la opción, como se hace a mano.
-    def via_flecha():
-        selector.locator(".ant-select-arrow").first.click(timeout=10_000)
-        page.wait_for_timeout(800)
-        page.locator(".ant-select-dropdown li", has_text=preset).first.click(timeout=10_000)
-
-    # Vía 2: clic directo sobre la opción que ya está en el DOM, sin abrir nada.
-    def via_opcion_directa():
-        page.locator(".ant-select-dropdown li", has_text=preset).first.click(timeout=10_000, force=True)
-
-    # Vía 3: clic por JavaScript sobre el nodo de la opción (React escucha el evento igual).
-    def via_js():
-        ok = page.evaluate("""(txt) => {
-            const op = [...document.querySelectorAll('.ant-select-dropdown li')]
-                .find(e => (e.innerText || '').trim().includes(txt));
-            if (!op) return false;
-            for (const t of ['mousedown', 'mouseup', 'click'])
-                op.dispatchEvent(new MouseEvent(t, {bubbles: true, cancelable: true, view: window}));
-            return true;
-        }""", preset)
-        if not ok:
-            raise RuntimeError("no encontré la opción en el DOM")
-
-    # Vía 4: por posición. Los dos presets que usamos son el anteúltimo y el último de la lista.
-    def via_posicion():
-        pos = len(PRESETS) - PRESETS.index(preset)  # 2 = anteúltimo, 1 = último
-        ok = page.evaluate("""([n]) => {
-            const ops = [...document.querySelectorAll('.ant-select-dropdown li')];
-            const op = ops[ops.length - n];
-            if (!op) return false;
-            for (const t of ['mousedown', 'mouseup', 'click'])
-                op.dispatchEvent(new MouseEvent(t, {bubbles: true, cancelable: true, view: window}));
-            return true;
-        }""", [pos])
-        if not ok:
-            raise RuntimeError("no hay opciones en el DOM")
-
-    for nombre, via in [("flecha", via_flecha), ("opción directa", via_opcion_directa),
-                        ("javascript", via_js), ("posición", via_posicion)]:
-        try:
-            via()
-            page.wait_for_timeout(1500)
-            if elegido() == preset:
-                print(f"Preset seleccionado por vía '{nombre}': {preset}")
-                break
-            vias.append(f"{nombre}: el selector quedó en {elegido()!r}")
-        except Exception as e:
-            vias.append(f"{nombre}: {str(e).splitlines()[0][:120]}")
-    else:
-        print("Opciones visibles en el DOM:", page.evaluate(
-            "() => [...document.querySelectorAll('.ant-select-dropdown li')].map(e => (e.innerText||'').trim())"))
-        raise RuntimeError("Ninguna vía seleccionó el preset. Detalle: " + " | ".join(vias))
-
-    page.locator("button.plan-create-button").first.click(timeout=20_000)
+    page.get_by_role("button", name="Create Plan").click(timeout=20_000)
     page.wait_for_timeout(1500)
-    modal = page.locator(".ant-modal:visible button.ant-btn-primary")
-    if modal.count():
-        modal.first.click()
+    page.get_by_role("dialog").get_by_role("button", name="Create Plan").click(timeout=20_000)
     page.wait_for_timeout(3000)
     print(f"Plan disparado para {preset}")
 
@@ -227,8 +162,8 @@ def main():
         ctx, page = nueva_pagina(p)
         login(page)
         go_replenishment(page)
-        for preset in PRESETS:
-            create_plan(page, preset)
+        for preset, texto in PRESETS:
+            create_plan(page, preset, texto)
         ctx.close()
 
     print(f"Planes disparados. Esperando {WAIT_SECONDS // 60} min para que Fountain9 los procese.")
