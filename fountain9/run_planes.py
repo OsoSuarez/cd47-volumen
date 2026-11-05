@@ -116,11 +116,16 @@ def create_plan(page, preset):
         return best;
     }""")
     icono = page.locator(".userSpecificView").nth(idx)
-    # El panel activo de las pestañas puede tapar el ícono y hover() falla por "intercepts pointer events".
-    # Disparamos los eventos de cursor directamente sobre el elemento.
     icono.scroll_into_view_if_needed(timeout=20_000)
-    icono.dispatch_event("mouseenter")
-    icono.dispatch_event("mouseover")
+    # El selector verde solo aparece con :hover real, así que movemos el cursor de verdad.
+    # Primero pasamos por la barra de pestañas (el panel activo puede tapar el ícono) y después al ícono.
+    box = icono.bounding_box()
+    tabs = page.locator(".ant-tabs-nav").first.bounding_box()
+    if tabs:
+        page.mouse.move(tabs["x"] + tabs["width"] / 2, tabs["y"] + tabs["height"] / 2)
+        page.wait_for_timeout(300)
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2, steps=10)
+    page.wait_for_timeout(500)
     selector = page.locator(".searchUserView").first
     selector.wait_for(state="visible", timeout=10_000)  # aparece al pasar el cursor
     selector.locator(".ant-select-arrow").first.click(timeout=20_000)
