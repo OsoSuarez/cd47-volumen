@@ -82,18 +82,41 @@ def login(page):
     page.wait_for_timeout(2000)
     if "/login" not in page.url and not page.locator("input[type=password]").count():
         return  # ya hay sesión
+
     # Ant Design / React: llenamos vía nativeInputValueSetter para disparar onChange
     _react_fill(page, "input[type=email]", USER)
     page.wait_for_timeout(300)
     _react_fill(page, "input[type=password]", PASS)
     page.wait_for_timeout(500)
-    page.locator("button[type=submit]").first.click()
+
+    # Debug: verificar estado del botón y valores en los inputs
+    btn_info = page.evaluate("""() => {
+        const btn = document.querySelector('button[type=submit]');
+        const email = document.querySelector('input[type=email]');
+        const pwd = document.querySelector('input[type=password]');
+        return {
+            btn_disabled: btn ? btn.disabled : 'NO BUTTON',
+            btn_text: btn ? btn.innerText : '',
+            email_value: email ? email.value : 'NO INPUT',
+            pwd_len: pwd ? pwd.value.length : 'NO INPUT',
+        };
+    }""")
+    print("ESTADO PRE-SUBMIT:", btn_info)
+
+    # Click en submit — usamos expect_navigation para esperar la redirección
     try:
-        page.wait_for_url(lambda u: "/login" not in u, timeout=90_000)
-    except Exception:
+        with page.expect_navigation(wait_until="domcontentloaded", timeout=90_000):
+            page.locator("button[type=submit]").first.click()
+    except Exception as e:
+        # Si el click dispara la navegación pero expect_navigation falla, revisamos la URL
+        print(f"expect_navigation error: {e}")
+        page.wait_for_timeout(3000)
+
+    if "/login" in page.url:
         print("LOGIN FALLIDO. URL:", page.url)
         print("TEXTO:", page.inner_text("body")[:800].replace("\n", " | "))
-        raise
+        raise RuntimeError("Login fallido — ver output arriba")
+
     page.wait_for_load_state("domcontentloaded", timeout=90_000)
     pass_secondary_screen(page)
 
