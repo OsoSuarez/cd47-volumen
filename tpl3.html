@@ -71,6 +71,22 @@ select,input[type=search]{background:var(--panel2);color:var(--ink);border:1px s
 .seg button.on{background:var(--yellow);color:#151515;font-weight:600}
 .btn{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 12px;font:inherit;cursor:pointer}
 .btn:hover{border-color:var(--yellow)}
+/* tooltips */
+.tip-wrap{position:relative;display:inline-flex}
+.tip-wrap .tip{
+  position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+  background:#1b1f25;border:1px solid #3a414a;border-radius:8px;
+  padding:10px 13px;width:220px;pointer-events:none;
+  opacity:0;transition:opacity .18s;z-index:999;
+  box-shadow:0 4px 16px #0008;
+}
+.tip-wrap:hover .tip{opacity:1}
+.tip-wrap .tip::after{
+  content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
+  border:6px solid transparent;border-top-color:#3a414a;
+}
+.tip-wrap .tip .tip-title{font-weight:700;font-size:13px;margin-bottom:5px}
+.tip-wrap .tip .tip-body{font-size:12px;color:var(--ink2);line-height:1.5}
 .btn.y{background:var(--yellow);color:#141414;border-color:var(--yellow);font-weight:600}
 .spacer{flex:1}
 /* KPIs */
@@ -210,15 +226,33 @@ table.cmp td.hi{color:var(--yellow2)}
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
-      <button class="btn" id="btnCargar" title="Carga los últimos filtrado_secos y filtrado_ryc desde la carpeta descargas/" style="background:#1e3a2f;color:#4ade80;font-weight:700;display:flex;align-items:center;gap:6px;border:1px solid #4ade80">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        Cargar últimos planes
-      </button>
-      <button class="btn" id="btnBot" title="Crea los planes en Fountain9, filtra los CSV y actualiza este dashboard" style="background:#f5b800;color:#1a1a1a;font-weight:700;display:flex;align-items:center;gap:6px">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>
-        Ejecutar bot
-      </button>
-      <button class="btn" id="clearAll">Vaciar muelle</button>
+      <span class="tip-wrap">
+        <button class="btn" id="btnCargar" style="background:#1e3a2f;color:#4ade80;font-weight:700;display:flex;align-items:center;gap:6px;border:1px solid #4ade80">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Cargar últimos planes
+        </button>
+        <div class="tip">
+          <div class="tip-title" style="color:#4ade80">📂 Cargar últimos planes</div>
+          <div class="tip-body">Levanta los CSVs más recientes de <code style="color:#4ade80">descargas/</code> (filtrado_secos y filtrado_ryc) y los carga automáticamente en el muelle.<br><br>Requiere correr primero:<br><code style="color:#7ee8a2">python fountain9/cargar_planes.py</code></div>
+        </div>
+      </span>
+      <span class="tip-wrap">
+        <button class="btn" id="btnBot" style="background:#f5b800;color:#1a1a1a;font-weight:700;display:flex;align-items:center;gap:6px">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>
+          Ejecutar bot
+        </button>
+        <div class="tip">
+          <div class="tip-title" style="color:#f5b800">🤖 Ejecutar bot de reabasto</div>
+          <div class="tip-body">Entra a Fountain9, genera los planes de reabasto para Secos y RyC, filtra los datos y descarga los CSVs en <code style="color:#ffd34d">descargas/</code>.<br><br>Requiere credenciales F9 en variables de entorno.</div>
+        </div>
+      </span>
+      <span class="tip-wrap">
+        <button class="btn" id="clearAll">Vaciar muelle</button>
+        <div class="tip">
+          <div class="tip-title" style="color:#e5534b">🗑 Vaciar muelle</div>
+          <div class="tip-body">Elimina todos los archivos cargados en el muelle y resetea el dashboard a cero.<br><br><span style="color:#e5534b">No se puede deshacer.</span></div>
+        </div>
+      </span>
     </div>
     <!-- Modal bot -->
     <div id="cargarModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center">
