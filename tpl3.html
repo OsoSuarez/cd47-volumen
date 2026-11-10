@@ -210,6 +210,10 @@ table.cmp td.hi{color:var(--yellow2)}
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
+      <button class="btn" id="btnCargar" title="Carga los últimos filtrado_secos y filtrado_ryc desde la carpeta descargas/" style="background:#1e3a2f;color:#4ade80;font-weight:700;display:flex;align-items:center;gap:6px;border:1px solid #4ade80">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Cargar últimos planes
+      </button>
       <button class="btn" id="btnBot" title="Crea los planes en Fountain9, filtra los CSV y actualiza este dashboard" style="background:#f5b800;color:#1a1a1a;font-weight:700;display:flex;align-items:center;gap:6px">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>
         Ejecutar bot
@@ -217,6 +221,26 @@ table.cmp td.hi{color:var(--yellow2)}
       <button class="btn" id="clearAll">Vaciar muelle</button>
     </div>
     <!-- Modal bot -->
+    <div id="cargarModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center">
+      <div style="background:#1e2128;border:1px solid #4ade80;border-radius:12px;padding:28px 32px;max-width:460px;width:90%;font-family:inherit">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <span style="font-size:1.5rem">📂</span>
+          <span style="font-size:1.1rem;font-weight:700;color:#4ade80">Cargar últimos planes</span>
+        </div>
+        <p style="color:#ccc;margin:0 0 12px;font-size:.9rem;line-height:1.5">
+          Carga los archivos <b>filtrado_secos</b> y <b>filtrado_ryc</b> más recientes de la carpeta <code>descargas/</code> y abre el dashboard con los datos listos.
+        </p>
+        <div id="cargarCmd" style="background:#0d0f13;border-radius:8px;padding:14px 16px;font-family:monospace;font-size:.88rem;color:#4ade80;letter-spacing:.01em;user-select:all;cursor:pointer">
+          python fountain9/cargar_planes.py
+        </div>
+        <p style="color:#888;margin:12px 0 0;font-size:.8rem">
+          ⚡ Tarda segundos. Abre el browser con el dashboard y los planes ya cargados en el muelle.
+        </p>
+        <div style="margin-top:20px;text-align:right">
+          <button onclick="document.getElementById('cargarModal').style.display='none'" style="background:#4ade80;color:#0d0f13;border:none;border-radius:6px;padding:8px 20px;font-weight:700;cursor:pointer;font-size:.9rem">Cerrar</button>
+        </div>
+      </div>
+    </div>
     <div id="botModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center">
       <div style="background:#1e2128;border:1px solid #f5b800;border-radius:12px;padding:28px 32px;max-width:460px;width:90%;font-family:inherit">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
@@ -597,6 +621,9 @@ async function addFiles(list){
       if(/\.xlsx?$/i.test(file.name))await parseXLSX(file,f,onProg);else await parseCSV(file,f,onProg);
       if(!f.rows)throw new Error('No se encontraron filas válidas');
       f.status='ok';
+      const nowIso=new Date().toISOString().slice(0,19);
+      localStorage.setItem('cd47_last_load',nowIso);
+      updateLastLoad(nowIso);
     }catch(e){f.status='err';f.msg=e.message;f.recs=[]}
     recompute();
   }
@@ -796,6 +823,26 @@ fi.onchange=()=>{addFiles([...fi.files]);fi.value=''};
 drop.addEventListener('drop',e=>addFiles([...e.dataTransfer.files]));
 $('#files').onclick=e=>{const b=e.target.closest('.x');if(!b)return;files=files.filter(f=>f.id!=+b.dataset.id);recompute()};
 $('#clearAll').onclick=()=>{files=[];recompute()};
+$('#btnCargar').onclick=()=>{const m=document.getElementById('cargarModal');m.style.display='flex'};
+document.getElementById('cargarModal').addEventListener('click',function(e){if(e.target===this)this.style.display='none'});
+document.querySelector('#cargarCmd').addEventListener('click',()=>{
+  navigator.clipboard?.writeText('python fountain9/cargar_planes.py').catch(()=>{});
+});
+// Auto-load files injected by cargar_planes.py via localStorage
+(()=>{
+  const raw=localStorage.getItem('cd47_autoload');
+  if(!raw)return;
+  localStorage.removeItem('cd47_autoload');
+  try{
+    const data=JSON.parse(raw);
+    if(!data.files||!data.files.length)return;
+    const fakeFiles=data.files.map(f=>{
+      const bytes=Uint8Array.from(atob(f.b64),c=>c.charCodeAt(0));
+      return new File([bytes],f.name,{type:'text/csv'});
+    });
+    setTimeout(()=>addFiles(fakeFiles),200);
+  }catch(e){console.warn('cd47_autoload parse error',e)}
+})();
 $('#btnBot').onclick=()=>{const m=document.getElementById('botModal');m.style.display='flex'};
 document.getElementById('botModal').addEventListener('click',function(e){if(e.target===this)this.style.display='none'});
 // When user copies the command → flag bot as running
