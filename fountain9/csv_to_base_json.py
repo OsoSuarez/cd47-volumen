@@ -188,6 +188,7 @@ def build_base_json(secos_path, ryc_path):
     ryc_obj   = make_file_obj(ryc_recs,   ryc_name,   ryc_dates,   ryc_whs,   ryc_skulist,   ryc_rows)
 
     base = {
+        "generated_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "dates": all_dates,
         "skus":  {str(k): v for k, v in all_skus.items()},
         "files": [secos_obj, ryc_obj],

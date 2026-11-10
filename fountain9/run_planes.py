@@ -22,6 +22,9 @@ PRESETS = [
 WAIT_SECONDS = 16 * 60
 OUT = pathlib.Path("descargas")
 
+# Carpeta de Google Drive donde van los plan_*.csv
+DRIVE_FOLDER_ID = "191VcxR9VLJDmZOSHsnHwHV538j8TAyEh"
+
 
 class _SinCierre:
     # Envoltorio para el Chrome conectado por CDP: no lo cerramos al terminar cada etapa.
@@ -39,7 +42,13 @@ def nueva_pagina(p):
     if cdp:
         browser = p.chromium.connect_over_cdp(cdp)
         ctx = browser.contexts[0]
-        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        # Buscar un tab que ya esté en Fountain9; si no hay, abrir uno nuevo
+        f9_page = None
+        for p_ in ctx.pages:
+            if "fountain9.com" in p_.url or "kronoscope" in p_.url:
+                f9_page = p_
+                break
+        page = f9_page if f9_page else ctx.new_page()
         return _SinCierre(ctx), page
     # F9_PERFIL: carpeta donde se guarda la sesión de Chrome (se resuelve el captcha una vez).
     # F9_CHANNEL=chrome usa el Chrome instalado. F9_HEADLESS=0 muestra la ventana.
@@ -297,6 +306,122 @@ def filtrar_y_subir():
     subprocess.run([sys.executable, str(scripts / "csv_to_base_json.py")], check=True)
 
 
+def subir_a_drive():
+    """Paso 4: sube los plan_*.csv de descargas/ a Google Drive (TR > PLANES FUTUROS).
+
+    Usa OAuth2 con token guardado en drive_token.json (junto a este script).
+    La PRIMERA vez abre el browser para autorizar; después es automático.
+
+    Requiere:
+        pip install google-auth google-auth-oauthlib google-api-python-client
+    Y tener drive_credentials.json (OAuth2 client secret) en la misma carpeta.
+    """
+    try:
+        from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from google.auth.transport.requests import Request
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
+    except ImportError:
+        print("\n[Drive] Instalando dependencias de Google Drive...")
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "pip", "install",
+                        "google-auth", "google-auth-oauthlib", "google-api-python-client"],
+                       check=True)
+        from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from google.auth.transport.requests import Request
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
+
+    SCOPES = ["https://www.googleapis.com/auth/drive"]
+    scripts_dir = pathlib.Path(__file__).parent
+    creds_file = scripts_dir / "drive_credentials.json"
+    token_file = scripts_dir / "drive_token.json"
+
+    if not creds_file.exists():
+        print(f"\n[Drive] ERROR: No encontré {creds_file}")
+        print("  Seguí las instrucciones en fountain9/DRIVE_SETUP.md para crearlo.")
+        return
+
+    creds = None
+    if token_file.exists():
+        creds = Credentials.from_authorized_user_file(str(token_file), SCOPES)
+
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(str(creds_file), SCOPES)
+            creds = flow.run_local_server(port=0)
+        token_file.write_text(creds.to_json())
+        print(f"[Drive] Token guardado en {token_file}")
+
+    service = build("drive", "v3", credentials=creds)
+
+    # Buscar los plan_*.csv más recientes en descargas/
+    out_dir = pathlib.Path(__file__).parent.parent / "descargas"
+    planes = sorted(out_dir.glob("plan_*.csv"), reverse=True)
+
+    # Tomar los 2 más recientes (plan_1_* y plan_2_* del último run)
+    # Agrupamos por run: cada run produce plan_1_* y plan_2_* con el mismo timestamp
+    if not planes:
+        print("\n[Drive] No hay plan_*.csv en descargas/. Nada que subir.")
+        return
+
+    # Tomamos el timestamp del más reciente y filtramos los que lo tienen
+    # Formato: plan_1_All - Fixed Schedule Replenishment Plan YYYY_MM_DD_HH_MM_SS.csv
+    import re as _re
+    ultimo_ts = None
+    for p in planes:
+        m = _re.search(r"(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})", p.name)
+        if m:
+            ultimo_ts = m.group(1)
+            break
+
+    if ultimo_ts:
+        archivos = [p for p in planes if ultimo_ts in p.name]
+    else:
+        archivos = planes[:2]
+
+    print(f"\n--- Paso 4: Subiendo {len(archivos)} archivo(s) a Google Drive ---")
+
+    for archivo in archivos:
+        nombre_drive = archivo.name
+        tamaño_mb = archivo.stat().st_size / 1_048_576
+
+        # Verificar si ya existe un archivo con ese nombre en la carpeta
+        q = (f"name='{nombre_drive}' and "
+             f"\'{DRIVE_FOLDER_ID}\' in parents and trashed=false")
+        existentes = service.files().list(q=q, fields="files(id,name)").execute()
+
+        media = MediaFileUpload(str(archivo), resumable=True, chunksize=10 * 1024 * 1024)
+
+        if existentes.get("files"):
+            file_id = existentes["files"][0]["id"]
+            print(f"  Actualizando {nombre_drive} ({tamaño_mb:.1f} MB)...")
+            service.files().update(
+                fileId=file_id,
+                media_body=media
+            ).execute()
+            print(f"  ✓ {nombre_drive} actualizado.")
+        else:
+            print(f"  Subiendo {nombre_drive} ({tamaño_mb:.1f} MB)...")
+            file_metadata = {
+                "name": nombre_drive,
+                "parents": [DRIVE_FOLDER_ID],
+            }
+            service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields="id,name"
+            ).execute()
+            print(f"  ✓ {nombre_drive} subido.")
+
+    print("[Drive] Listo. Archivos disponibles en TR > PLANES FUTUROS.")
+
+
 if __name__ == "__main__":
     main()
     filtrar_y_subir()
+    subir_a_drive()

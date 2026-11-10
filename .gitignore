@@ -2,3 +2,6 @@ datos/
 site/
 volumen_futuro.html
 __pycache__/
+descargas/
+fountain9/drive_credentials.json
+fountain9/drive_token.json

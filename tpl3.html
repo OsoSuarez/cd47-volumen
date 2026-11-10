@@ -40,6 +40,7 @@ h1 span{color:var(--yellow)}
 @keyframes lift{0%,40%{transform:translateY(0)}46%,50%{transform:translateY(-14px)}56%,100%{transform:translateY(0)}}
 .wheel{transform-origin:center;transform-box:fill-box;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 /* ---------- panels ---------- */
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:16px}
 .ptitle{font-family:"Barlow Condensed";font-size:18px;letter-spacing:.6px;text-transform:uppercase;margin:0 0 12px;display:flex;align-items:center;gap:10px}
@@ -196,6 +197,17 @@ table.cmp td.hi{color:var(--yellow2)}
       <input type="file" id="fi" accept=".csv,.txt,.xlsx,.xls" multiple hidden>
     </label>
     <div class="files" id="files"></div>
+    <!-- status strip -->
+    <div id="statusStrip" style="display:flex;align-items:center;gap:14px;padding:8px 2px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);margin-top:10px">
+      <span id="lastLoad" style="display:flex;align-items:center;gap:5px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.7"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <span id="lastLoadTxt">Sin datos cargados</span>
+      </span>
+      <span id="botStatus" style="display:none;align-items:center;gap:5px">
+        <span id="botDot" style="width:7px;height:7px;border-radius:50%;background:var(--teal);animation:pulse 1.2s ease-in-out infinite"></span>
+        <span id="botStatusTxt">Bot corriendo…</span>
+      </span>
+    </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
       <button class="btn" id="btnBot" title="Crea los planes en Fountain9, filtra los CSV y actualiza este dashboard" style="background:#f5b800;color:#1a1a1a;font-weight:700;display:flex;align-items:center;gap:6px">
@@ -462,12 +474,42 @@ let agg=null;
 (()=>{let h='';for(let r=0;r<9;r++){h+='<div class="rack">';for(let s=0;s<3;s++){h+='<div class="shelf">';const n=2+((r*7+s*3)%3);for(let b=0;b<n;b++)h+=`<div class="bx ${['','t','s'][(r+s+b)%3]}"></div>`;h+='</div>'}h+='</div>'}$('#racks').innerHTML=h})();
 
 // ---------- preloaded base ----------
+let baseGeneratedAt=null;
 try{
   const B=JSON.parse($('#base').textContent);
+  if(B.generated_at) baseGeneratedAt=B.generated_at;
   for(const [id,[nm,bt,tp]] of Object.entries(B.skus)) skus.set(+id,{name:nm,batch:bt,temp:tName(tp)});
   for(const F of B.files){const recs=[];const R=F.recs;for(let i=0;i<R.length;i+=4){recs.push(R[i],R[i+1],B.dates[R[i+2]],R[i+3])}
     files.push({id:++fileSeq,name:F.file,status:'ok',pre:true,recs,rows:F.rows,whs:new Set(F.whs),dates:new Set(F.dates),skuSet:new Set(F.skus),temps:new Set(F.skus.map(s=>skus.get(s).temp))});}
 }catch(e){console.warn(e)}
+
+// ---------- status strip ----------
+function fmtDateTime(iso){
+  if(!iso) return null;
+  try{
+    const d=new Date(iso);
+    const pad=n=>String(n).padStart(2,'0');
+    return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }catch{return iso}
+}
+function updateLastLoad(ts){
+  const el=$('#lastLoadTxt');
+  if(ts) el.textContent='Última carga: '+fmtDateTime(ts);
+  else el.textContent='Sin datos cargados';
+}
+function setBotRunning(running){
+  const s=$('#botStatus');
+  s.style.display=running?'flex':'none';
+}
+// Init last load from base.json timestamp or localStorage fallback
+(()=>{
+  const stored=localStorage.getItem('cd47_last_load');
+  const ts=baseGeneratedAt||stored;
+  updateLastLoad(ts);
+  // Check if bot was running and dashboard just refreshed (bot sets flag before reload)
+  const botFlag=localStorage.getItem('cd47_bot_running');
+  if(botFlag==='1') setBotRunning(true);
+})();
 
 // ---------- parsing ----------
 function normDate(v){
@@ -756,6 +798,21 @@ $('#files').onclick=e=>{const b=e.target.closest('.x');if(!b)return;files=files.
 $('#clearAll').onclick=()=>{files=[];recompute()};
 $('#btnBot').onclick=()=>{const m=document.getElementById('botModal');m.style.display='flex'};
 document.getElementById('botModal').addEventListener('click',function(e){if(e.target===this)this.style.display='none'});
+// When user copies the command → flag bot as running
+document.querySelector('#botModal .mono').addEventListener('click',()=>{
+  localStorage.setItem('cd47_bot_running','1');
+  setBotRunning(true);
+});
+// Hide bot indicator when dashboard reloads with fresh data (baseGeneratedAt changed)
+(()=>{
+  const prevTs=localStorage.getItem('cd47_last_load');
+  if(baseGeneratedAt&&baseGeneratedAt!==prevTs){
+    localStorage.setItem('cd47_last_load',baseGeneratedAt);
+    localStorage.removeItem('cd47_bot_running');
+    setBotRunning(false);
+    updateLastLoad(baseGeneratedAt);
+  }
+})();
 $('#selWh').onchange=e=>{whSel=e.target.value;renderAll()};
 $('#selTp').onchange=e=>{tpSel=e.target.value;renderAll()};
 $('#ckImp').onchange=e=>{IMP=e.target.checked;renderAll()};
