@@ -858,7 +858,32 @@ fi.onchange=()=>{addFiles([...fi.files]);fi.value=''};
 drop.addEventListener('drop',e=>addFiles([...e.dataTransfer.files]));
 $('#files').onclick=e=>{const b=e.target.closest('.x');if(!b)return;files=files.filter(f=>f.id!=+b.dataset.id);recompute()};
 $('#clearAll').onclick=()=>{files=[];recompute()};
-$('#btnCargar').onclick=()=>{const m=document.getElementById('cargarModal');m.style.display='flex'};
+$('#btnCargar').onclick=()=>{
+  const btn=$('#btnCargar');
+  const orig=btn.innerHTML;
+  btn.disabled=true;btn.innerHTML='⏳ Cargando…';
+  const base='http://localhost:9747';
+  fetch(`${base}/manifest`)
+    .then(r=>r.json())
+    .then(async manifest=>{
+      const ts=manifest.ts;
+      if(ts){localStorage.setItem('cd47_last_load',ts);updateLastLoad(ts);}
+      const fakeFiles=[];
+      for(const f of manifest.files){
+        const resp=await fetch(f.url);
+        if(!resp.ok)throw new Error(`No se pudo descargar ${f.name}`);
+        const blob=await resp.blob();
+        fakeFiles.push(new File([blob],f.name,{type:'text/csv'}));
+      }
+      await addFiles(fakeFiles);
+      fetch(`${base}/done`).catch(()=>{});
+      btn.disabled=false;btn.innerHTML=orig;
+    })
+    .catch(()=>{
+      btn.disabled=false;btn.innerHTML=orig;
+      const m=document.getElementById('cargarModal');m.style.display='flex';
+    });
+};
 document.getElementById('cargarModal').addEventListener('click',function(e){if(e.target===this)this.style.display='none'});
 document.querySelector('#cargarCmd').addEventListener('click',()=>{
   navigator.clipboard?.writeText('python fountain9/cargar_planes.py').catch(()=>{});
