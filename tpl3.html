@@ -888,30 +888,7 @@ document.getElementById('cargarModal').addEventListener('click',function(e){if(e
 document.querySelector('#cargarCmd').addEventListener('click',()=>{
   navigator.clipboard?.writeText('python fountain9/cargar_planes.py').catch(()=>{});
 });
-// Auto-load files served by cargar_planes.py local server
-(()=>{
-  const params=new URLSearchParams(location.search);
-  const port=params.get('autoload');
-  const ts=params.get('ts');
-  if(!port)return;
-  history.replaceState(null,'',location.pathname);
-  const base=`http://localhost:${port}`;
-  fetch(`${base}/manifest`)
-    .then(r=>r.json())
-    .then(async manifest=>{
-      if(ts){localStorage.setItem('cd47_last_load',ts);updateLastLoad(ts);}
-      const fakeFiles=[];
-      for(const f of manifest.files){
-        const resp=await fetch(f.url);
-        if(!resp.ok)throw new Error(`No se pudo descargar ${f.name}`);
-        const blob=await resp.blob();
-        fakeFiles.push(new File([blob],f.name,{type:'text/csv'}));
-      }
-      await addFiles(fakeFiles);
-      fetch(`${base}/done`).catch(()=>{});
-    })
-    .catch(e=>console.warn('cargar_planes autoload error:',e));
-})();
+// autoload por URL eliminado — el botón "Cargar últimos planes" hace fetch directo a localhost:9747
 $('#btnBot').onclick=()=>{const m=document.getElementById('botModal');m.style.display='flex'};
 document.getElementById('botModal').addEventListener('click',function(e){if(e.target===this)this.style.display='none'});
 // When user copies the command → flag bot as running
