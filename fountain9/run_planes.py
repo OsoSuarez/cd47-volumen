@@ -66,9 +66,18 @@ def login(page):
     page.wait_for_timeout(1500)
     if "/login" not in page.url and not page.locator("input[type=password]").count():
         return  # ya hay sesión
-    page.locator("input[type=email]").first.fill(USER)
-    page.locator("input[type=password]").first.fill(PASS)
-    page.locator("button[type=submit]", has_text="Login").first.click()
+    # Ant Design / React requiere click + type para disparar los eventos correctamente
+    email_input = page.locator("input[type=email]").first
+    email_input.click()
+    email_input.triple_click()
+    email_input.type(USER, delay=50)
+    page.wait_for_timeout(300)
+    pass_input = page.locator("input[type=password]").first
+    pass_input.click()
+    pass_input.triple_click()
+    pass_input.type(PASS, delay=50)
+    page.wait_for_timeout(500)
+    page.locator("button[type=submit]").first.click()
     try:
         page.wait_for_url(lambda u: "/login" not in u, timeout=90_000)
     except Exception:
