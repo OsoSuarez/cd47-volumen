@@ -61,19 +61,31 @@ def nueva_pagina(p):
     return ctx, ctx.new_page()
 
 
+def _react_fill(page, selector, value):
+    """Llena un input de React/Ant Design disparando los eventos que el framework espera."""
+    page.evaluate(
+        """([sel, val]) => {
+            const el = document.querySelector(sel);
+            if (!el) throw new Error('input no encontrado: ' + sel);
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value').set;
+            nativeInputValueSetter.call(el, val);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        }""",
+        [selector, value],
+    )
+
+
 def login(page):
     page.goto(URL, wait_until="domcontentloaded", timeout=90_000)
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(2000)
     if "/login" not in page.url and not page.locator("input[type=password]").count():
         return  # ya hay sesión
-    # Ant Design / React requiere click + type para disparar los eventos correctamente
-    email_input = page.locator("input[type=email]").first
-    email_input.click(click_count=3)
-    email_input.type(USER, delay=50)
+    # Ant Design / React: llenamos vía nativeInputValueSetter para disparar onChange
+    _react_fill(page, "input[type=email]", USER)
     page.wait_for_timeout(300)
-    pass_input = page.locator("input[type=password]").first
-    pass_input.click(click_count=3)
-    pass_input.type(PASS, delay=50)
+    _react_fill(page, "input[type=password]", PASS)
     page.wait_for_timeout(500)
     page.locator("button[type=submit]").first.click()
     try:
