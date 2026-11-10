@@ -668,7 +668,8 @@ function recompute(){
   const merged=new Map();
   for(const f of files){if(f.status!=='ok')continue;f.newK=0;f.overK=0;const R=f.recs;
     for(let i=0;i<R.length;i+=4){const k=R[i]+'|'+R[i+1]+'|'+R[i+2];if(merged.has(k))f.overK++;else f.newK++;merged.set(k,R[i+3])}}
-  const dates=[...new Set([...merged.keys()].map(k=>k.split('|')[2]))].sort();
+  const todayStr=new Date().toISOString().slice(0,10);
+  const dates=[...new Set([...merged.keys()].map(k=>k.split('|')[2]))].filter(d=>d>=todayStr).sort();
   const di=new Map(dates.map((d,i)=>[d,i]));const whs=new Set();
   const M={w:[],s:[],d:[],q:[]};
   for(const [k,qv] of merged){const [w,s,d]=k.split('|');whs.add(+w);if(!(qv>0))continue;M.w.push(+w);M.s.push(+s);M.d.push(di.get(d));M.q.push(qv)}
