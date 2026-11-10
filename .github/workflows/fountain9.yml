@@ -2,9 +2,9 @@ name: Fountain9 planes de reabasto
 
 on:
   workflow_dispatch:
-  # Pendiente: activar cuando el flujo esté probado.
-  # schedule:
-  #   - cron: '0 10 * * *'   # hora a confirmar (UTC)
+  schedule:
+    - cron: '0 13 * * 1-5'   # 10:00 AR (lun–vie)
+    - cron: '0 17 * * 1-5'   # 14:00 AR (lun–vie)
 
 jobs:
   planes:
