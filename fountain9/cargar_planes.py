@@ -1,19 +1,22 @@
 """
-cargar_planes.py — carga los filtrado_secos y filtrado_ryc más recientes
-en el dashboard (ososuarez.github.io/cd47-volumen/) via localStorage.
+cargar_planes.py — sirve los filtrado_secos y filtrado_ryc más recientes
+en un servidor local y abre el dashboard para que los descargue automáticamente.
 
 Uso:
     python fountain9/cargar_planes.py
 
-Requiere: Google Chrome instalado en la ruta estándar de Windows.
+El servidor corre en http://localhost:9747/ y se apaga solo después de que
+el dashboard descargó los archivos (o tras 5 minutos de inactividad).
 """
 
-import base64, json, pathlib, subprocess, sys, tempfile, textwrap, time
+import pathlib, sys, threading, time, subprocess, json, urllib.parse
 from datetime import datetime
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
-DASHBOARD_URL = "https://ososuarez.github.io/cd47-volumen/"
 DESCARGAS     = pathlib.Path(__file__).parent.parent / "descargas"
-MAX_BYTES     = 50 * 1024 * 1024   # 50 MB por archivo — avisa si es más grande
+DASHBOARD_URL = "https://ososuarez.github.io/cd47-volumen/"
+PORT          = 9747
+TIMEOUT_S     = 300   # apagar el servidor tras 5 min si no descargó
 
 def latest(pattern):
     files = sorted(DESCARGAS.glob(pattern), key=lambda f: f.stat().st_mtime, reverse=True)
@@ -31,65 +34,96 @@ def main():
     print(f"📂  Secos : {secos.name}  ({secos.stat().st_size/1e6:.1f} MB)")
     print(f"📂  RyC   : {ryc.name}  ({ryc.stat().st_size/1e6:.1f} MB)")
 
-    for f in (secos, ryc):
-        if f.stat().st_size > MAX_BYTES:
-            print(f"⚠️  {f.name} pesa {f.stat().st_size/1e6:.0f} MB — puede tardar unos segundos en cargar.")
-
-    # Leer y encodear
-    print("⏳  Leyendo archivos...")
-    secos_b64 = base64.b64encode(secos.read_bytes()).decode()
-    ryc_b64   = base64.b64encode(ryc.read_bytes()).decode()
-
-    ts_now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-
-    payload = json.dumps({
+    ts_now    = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    files_map = {
+        "secos": secos,
+        "ryc":   ryc,
+    }
+    manifest = {
+        "ts":    ts_now,
         "files": [
-            {"name": secos.name, "b64": secos_b64},
-            {"name": ryc.name,   "b64": ryc_b64},
-        ],
-        "ts": ts_now,
-    })
+            {"key": "secos", "name": secos.name, "url": f"http://localhost:{PORT}/file/secos"},
+            {"key": "ryc",   "name": ryc.name,   "url": f"http://localhost:{PORT}/file/ryc"},
+        ]
+    }
 
-    # HTML de puente: escribe en localStorage y redirige al dashboard
-    bridge_html = textwrap.dedent(f"""\
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"><title>Cargando planes…</title></head>
-        <body style="background:#0d0f13;color:#7dd3fc;font-family:monospace;padding:40px;font-size:1rem">
-        <p>⏳ Cargando planes en el dashboard…</p>
-        <script>
-        try {{
-          const payload = {json.dumps(payload)};
-          const data = JSON.parse(payload);
-          localStorage.setItem('cd47_autoload', payload);
-          localStorage.setItem('cd47_last_load', data.ts);
-        }} catch(e) {{ document.body.innerHTML += '<p style="color:#ff9d97">Error: ' + e.message + '</p>'; }}
-        setTimeout(() => window.location.href = {json.dumps(DASHBOARD_URL)}, 400);
-        </script>
-        </body>
-        </html>
-    """)
+    downloads_done = threading.Event()
 
-    with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8") as tmp:
-        tmp.write(bridge_html)
-        bridge_path = tmp.name
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            pass  # silenciar logs HTTP
 
-    print(f"🌐  Abriendo dashboard con los planes cargados…")
+        def do_GET(self):
+            path = urllib.parse.urlparse(self.path).path
+
+            # CORS para que el dashboard (github.io) pueda leer
+            if path == "/manifest":
+                body = json.dumps(manifest).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            elif path.startswith("/file/"):
+                key = path.split("/file/")[-1]
+                f   = files_map.get(key)
+                if not f or not f.exists():
+                    self.send_response(404); self.end_headers(); return
+                size = f.stat().st_size
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Length", str(size))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Content-Disposition", f'attachment; filename="{f.name}"')
+                self.end_headers()
+                with open(f, "rb") as fh:
+                    while chunk := fh.read(1 << 20):
+                        self.wfile.write(chunk)
+                print(f"✅  Enviado: {f.name}")
+
+            elif path == "/done":
+                self.send_response(200)
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                downloads_done.set()
+
+            else:
+                self.send_response(404); self.end_headers()
+
+        def do_OPTIONS(self):
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+            self.end_headers()
+
+    server = HTTPServer(("localhost", PORT), Handler)
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    print(f"🌐  Servidor local en http://localhost:{PORT}/  (se apaga solo al terminar)")
+
+    # URL del dashboard con parámetro para disparar la carga automática
+    dashboard = DASHBOARD_URL + f"?autoload={PORT}&ts={urllib.parse.quote(ts_now)}"
 
     chrome_paths = [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
     ]
     chrome = next((p for p in chrome_paths if pathlib.Path(p).exists()), None)
-
     if chrome:
-        subprocess.Popen([chrome, f"file:///{bridge_path.replace(chr(92), '/')}"])
+        subprocess.Popen([chrome, dashboard])
     else:
         import webbrowser
-        webbrowser.open(f"file:///{bridge_path.replace(chr(92), '/')}")
+        webbrowser.open(dashboard)
 
-    print("✅  Listo. El browser debería abrir el dashboard con los planes cargados.")
-    print(f"   Timestamp: {ts_now}")
+    print("⏳  Esperando que el dashboard descargue los archivos…")
+    done = downloads_done.wait(timeout=TIMEOUT_S)
+    server.shutdown()
+    if done:
+        print(f"\n🎉  ¡Listo! Planes cargados en el dashboard. Timestamp: {ts_now}")
+    else:
+        print("\n⚠️  Tiempo de espera agotado. Verificá que el dashboard esté abierto.")
 
 if __name__ == "__main__":
     main()
