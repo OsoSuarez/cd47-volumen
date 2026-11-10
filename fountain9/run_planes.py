@@ -70,7 +70,7 @@ def login(page):
     page.locator("input[type=password]").first.fill(PASS)
     page.locator("button[type=submit]", has_text="Login").first.click()
     try:
-        page.wait_for_url(lambda u: "/login" not in u, timeout=45_000)
+        page.wait_for_url(lambda u: "/login" not in u, timeout=90_000)
     except Exception:
         print("LOGIN FALLIDO. URL:", page.url)
         print("TEXTO:", page.inner_text("body")[:800].replace("\n", " | "))
