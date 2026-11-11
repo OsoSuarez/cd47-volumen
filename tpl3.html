@@ -61,10 +61,11 @@ h1 span{color:var(--yellow)}
 .x{background:none;border:1px solid var(--line);color:var(--ink2);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:16px}
 .x:hover{border-color:var(--red);color:var(--red)}
 .prog{height:22px;position:relative;margin-top:6px;background:#15181c;border-radius:4px;overflow:hidden}
-.prog .bar{position:absolute;left:0;top:0;bottom:0;background:repeating-linear-gradient(-45deg,#e07b24 0 8px,#b85f10 8px 16px);background-size:22px 22px;animation:stripes 0.5s linear infinite;transition:width .3s}
-@keyframes stripes{0%{background-position:0 0}100%{background-position:22px 0}}
-@keyframes forklift-bounce{0%{transform:translateY(0px)}100%{transform:translateY(-3px)}}
-.prog .mini{position:absolute;top:-2px;width:36px;height:26px;transition:left .3s;filter:drop-shadow(0 0 4px #e07b24);animation:forklift-bounce 0.4s ease-in-out infinite alternate}
+.prog .bar{position:absolute;left:0;top:0;bottom:0;overflow:hidden;transition:width .1s}
+.prog .bar:before{content:"";position:absolute;top:0;bottom:0;left:-46px;right:-46px;background:repeating-linear-gradient(-45deg,#e07b24 0 8px,#b85f10 8px 16px);animation:stripes .6s linear infinite;will-change:transform}
+@keyframes stripes{to{transform:translateX(22.63px)}}
+@keyframes forklift-bounce{to{transform:translateY(-3px)}}
+.prog .mini{position:absolute;top:-2px;width:36px;height:26px;transition:left .1s;animation:forklift-bounce .4s ease-in-out infinite alternate;will-change:transform}
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .toolbar label{color:var(--ink2);font-size:12.5px;text-transform:uppercase;letter-spacing:.5px}
 select,input[type=search]{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 10px;font:inherit}
