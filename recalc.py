@@ -184,6 +184,13 @@ alm_out = {str(k): (int(v) if float(v).is_integer() else v) for k, v in ALM.item
 tpl = patch(tpl, 'ALM', alm_out)
 tpl = patch(tpl, 'SYNC', {str(k): v for k, v in SYNC.items()})
 tpl = patch(tpl, 'UBIC', {str(k): [round(v[0]), v[1], v[2]] for k, v in UB.items()})
+CAPG = defaultdict(lambda: [0, 0])
+for u, c in CAPU.items():
+    g = picks.get(u, '') or ''
+    CAPG[g][0] += 1
+    if c:
+        CAPG[g][1] += 1
+tpl = patch(tpl, 'CAPG', dict(CAPG))
 tpl, n = re.subn(r'id="invFecha" value="\d{4}-\d{2}-\d{2}"', 'id="invFecha" value="%s"' % FECHA, tpl, count=1)
 if n != 1:
     sys.exit('No encontré el campo de fecha')
