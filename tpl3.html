@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 02:30</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 02:45</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -1520,7 +1520,7 @@ function semCalc(C){
   // fijo, los reabastos totales se minimizan dando a cada SKU un espacio proporcional
   // a la raiz cuadrada de su flujo en volumen. El espacio del grupo es el que ya
   // ocupan hoy sus Max; fuera del frio puede crecer hasta el tope de ocupacion.
-  const sku=[],prop=new Map(),tot={secos:0,frio:0},totAct={secos:0,frio:0};
+  const sku=[],prop=new Map(),hoyFis=new Map(),tot={secos:0,frio:0},totAct={secos:0,frio:0};
   for(const g of G.values()){
     const vs=g.items.map(r=>volDe(r.s)).filter(v=>!isNaN(v)).sort((x,y)=>x-y);
     const vMed=vs.length?vs[vs.length>>1]:1;
@@ -1571,8 +1571,13 @@ function semCalc(C){
       // posible. Donde el grupo tiene lugar, no se baja el Max de hoy si entra fisicamente.
       if(V2&&holgado&&(r.max||0)>maxP&&!vlNoEntra){maxP=r.max;mantiene=true}
       const cicloP=maxP-minP;
-      const cicloA=(r.max||0)-(r.min||0);
+      // En v2 la base "hoy" usa el Max de la V L recortado a lo que entra fisicamente:
+      // comparar contra un Max que no se puede guardar subestima los reabastos de hoy.
+      const maxHoy=vlNoEntra?t.fis.u:(r.max||0);
+      const cicloA=maxHoy-(r.min||0),cicloRaw=(r.max||0)-(r.min||0);
       const reabAct=cicloA>0?dem/cicloA:null,reabProp=dem/cicloP;
+      if(cicloRaw>0)g.reabRaw=(g.reabRaw||0)+dem/cicloRaw;
+      if(vlNoEntra)hoyFis.set(r.s,{min:r.min||0,max:t.fis.u});
       const diasMin=(r.min||0)/r.prom,libera=Math.max(0,(r.max||0)-maxP);
       // Transicion con la logica de hoy (repone demanda + Min - stock): el Min de
       // transicion deja la posicion cerca del Max objetivo despues de cada reabasto.
@@ -1612,13 +1617,14 @@ function semCalc(C){
     const u=S.out[S.out.length-1];
     return {ej,ejAparte,falt,cola:u.secos.pend+u.frio.pend,
       dias:S.out.filter(d=>d.secos.req>d.secos.cap||d.frio.req>d.frio.cap).length}};
-  const simHoy=resumen(simRun(C,'vl'),true),simProp=resumen(simRun(C,prop),false);
+  const simHoy=resumen(simRun(C,V2?hoyFis:'vl'),true),simProp=resumen(simRun(C,prop),false);
   // Transicion: la semana con la logica de reabasto de hoy, Min de la V L contra Min de transicion
   const minTm=new Map(sku.map(x=>[x.s,x.minT]));
   const trHoy=transRun(C,(s,info)=>isNaN(info.min)?0:info.min);
   const trProp=transRun(C,(s,info)=>minTm.has(s)?minTm.get(s):(isNaN(info.min)?0:info.min));
   return {G:lista,sku,capSem:{secos:C.capS*nD,frio:C.capF*nD},tot,totAct,nD,simHoy,simProp,trHoy,trProp,v2:V2,
-    conFis:sku.filter(x=>x.maxFis!=null).length};
+    conFis:sku.filter(x=>x.maxFis!=null).length,noEntra:sku.filter(x=>x.maxFis!=null&&(x.maxAct||0)>x.maxFis).length,
+    reabRaw:lista.reduce((a,g)=>a+(g.reabRaw||0),0)};
 }
 
 // Logica de reabasto de hoy: si el stock de picking no alcanza para la demanda del dia,
@@ -1669,7 +1675,7 @@ function renderSem(C){
   const invHoy=R.G.reduce((a,g)=>a+g.invAct,0);
   KP.innerHTML=[
     ['Capacidad de la semana',nf.format(Math.round(capT)),`${nf.format(Math.round(R.capSem.secos))} secos · ${nf.format(Math.round(R.capSem.frio))} frío · ${R.nD} días`],
-    ['Reabastos hoy (V L)',nf.format(Math.round(actT)),`sin contar ${nf.format(invHoy)} SKUs con Max ≤ Min`],
+    ['Reabastos hoy (V L)',nf.format(Math.round(actT)),R.v2&&R.noEntra?`con el Max recortado a lo que entra en ${nf.format(R.noEntra)} SKUs (sin recortar: ${nf.format(Math.round(R.reabRaw))}) · sin contar ${nf.format(invHoy)} con Max ≤ Min`:`sin contar ${nf.format(invHoy)} SKUs con Max ≤ Min`],
     ['Con la propuesta',nf.format(Math.round(propT)),(propT>capT?`${nf.format(Math.round(propT-capT))} por encima de la capacidad semanal`:'entra en la capacidad semanal')+` · ${R.simProp.dias} de ${R.nD} días se pasan`],
     ['Diferencia',(propT<=actT?'−':'+')+nf.format(Math.round(Math.abs(actT-propT))),propT<=actT?'menos reabastos, y cubre también los SKUs sin ciclo':'MÁS reabastos que hoy'],
   ].map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
