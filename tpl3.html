@@ -874,14 +874,15 @@ $('#btnCargar').onclick=()=>{
     .then(async manifest=>{
       const ts=manifest.ts;
       if(ts){localStorage.setItem('cd47_last_load',ts);updateLastLoad(ts);}
-      const fakeFiles=[];
+      // Se parsea mientras baja: no se espera a tener el archivo entero en memoria.
+      // El servidor local es de un solo hilo, así que va de a uno.
       for(const f of manifest.files){
         const resp=await fetch(f.url);
         if(!resp.ok)throw new Error(`No se pudo descargar ${f.name}`);
-        const blob=await resp.blob();
-        fakeFiles.push(new File([blob],f.name,{type:'text/csv'}));
+        const size=+(resp.headers.get('content-length')||0);
+        if(size&&resp.body)await addFiles([{name:f.name,size,stream:()=>resp.body}]);
+        else await addFiles([new File([await resp.blob()],f.name,{type:'text/csv'})]);
       }
-      await addFiles(fakeFiles);
       fetch(`${base}/done`).catch(()=>{});
       btn.disabled=false;btn.innerHTML=orig;
     })
