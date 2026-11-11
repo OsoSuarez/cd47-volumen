@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-10 22:50</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-10 22:58</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -605,15 +605,6 @@ function makeSink(f,idx){
   };
 }
 
-// Cede el control sin usar setTimeout: Chrome estrangula los timers de las pestañas
-// en segundo plano (1/s, y 1/min tras 5 min oculta), lo que congelaba la carga si el
-// usuario se iba a otra ventana. postMessage no sufre ese throttling.
-const yieldToUI=(()=>{
-  const ch=new MessageChannel(),q=[];
-  ch.port1.onmessage=()=>{const r=q.shift();if(r)r()};
-  return()=>new Promise(r=>{q.push(r);ch.port2.postMessage(0)});
-})();
-
 async function parseCSV(file,f,onProg){
   const reader=file.stream().getReader();const dec=new TextDecoder('utf-8');
   let pending='',read=0,delim=null,idx=null,need=null,sink=null,lastPaint=0;
@@ -642,8 +633,11 @@ async function parseCSV(file,f,onProg){
     read+=value.length;let text=pending+dec.decode(value,{stream:true});
     if(delim===null){const nl=text.indexOf('\n');if(nl<0&&read<file.size){pending=text;continue}const first=text.slice(0,nl<0?text.length:nl);const cnt=ch=>first.split(ch).length;delim=[[',',cnt(',')],[';',cnt(';')],['\t',cnt('\t')]].sort((a,b)=>b[1]-a[1])[0][0].charCodeAt(0)}
     pending=parse(text,false);
+    // Se cede el control solo si la pestaña está visible. Chrome estrangula los
+    // timers en segundo plano (1/s, y 1/min tras 5 min oculta); si nadie mira la
+    // pantalla no hace falta pausar para repintar, así que se sigue de largo.
     const now=performance.now();
-    if(now-lastPaint>60){if(!document.hidden)onProg(read/file.size);lastPaint=now;await yieldToUI()}
+    if(now-lastPaint>60){onProg(read/file.size);lastPaint=now;if(!document.hidden)await new Promise(r=>setTimeout(r,0))}
   }
   if(!idx)throw new Error('No se encontró la fila de encabezados');
 }
