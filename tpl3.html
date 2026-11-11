@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 03:30</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 03:50</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -485,7 +485,11 @@ table.cmp td.hi{color:var(--yellow2)}
   <div id="simWarn"></div>
   <div class="panel">
     <div class="ptitle">Reabastos requeridos por día</div>
-    <div class="chart" id="chSim"><div class="cap" id="simCap"></div><svg></svg><div class="tip"></div></div>
+    <div class="note" style="margin-top:0">Cada zona tiene su propia capacidad y no se compensan: la gente de frío no repone secos. La sombra es la capacidad de cada zona.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px">
+      <div class="chart" id="chSim"><div class="cap" id="simCap"></div><svg></svg><div class="tip"></div></div>
+      <div class="chart" id="chSimF"><div class="cap" id="simCapF"></div><svg></svg><div class="tip"></div></div>
+    </div>
   </div>
   <div class="panel">
     <div class="ptitle" style="margin-bottom:12px">Simulación diaria</div>
@@ -1586,6 +1590,7 @@ function semCalc(C){
     // cada SKU ya tiene en su propia ubicacion medida)
     const kOpt=conOcup?Math.max(1,OCUP_TOPE*o.E/o.F):1;
     g.bud=kOpt*espHoy;g.tmp=tmp;
+    g.libres=conOcup?Math.max(0,Math.floor(OCUP_TOPE*o.E-o.F)):0;   // posiciones libres hasta el tope
     for(const t of tmp){
       const r=t.r,cu=t.cv/t.v;                     // ciclo en unidades
       const ciclo=isNaN(t.B)?Math.max(1,Math.round(cu)):Math.max(t.B,Math.round(cu/t.B)*t.B);
@@ -1617,11 +1622,11 @@ function semCalc(C){
   const cap={secos:C.capS,frio:C.capF};
   const espT=()=>{const e={secos:new Float64Array(nD),frio:new Float64Array(nD)};
     for(const t of T){const c=t.maxP-t.minP;if(!(c>0))continue;const ep=e[t.pool];for(let j=0;j<nD;j++)ep[j]+=t.dd[j]/c}return e};
-  const opt={rondas:0,ajustes:0,margen:0.97,dias:null,motivo:'',deficit:{secos:0,frio:0}};
+  const opt={rondas:0,ajustes:0,ubic:0,margen:0.97,dias:null,motivo:'',deficit:{secos:0,frio:0}};
   let SP=null;
   for(let ronda=0;ronda<10;ronda++){
     opt.rondas=ronda+1;
-    for(let it=0;it<300;it++){
+    for(let it=0;it<600;it++){
       const e=espT(),over={secos:[],frio:[]};let hay=false;
       for(const p of ['secos','frio'])for(let j=0;j<nD;j++)if(e[p][j]>cap[p]*opt.margen){over[p].push(j);hay=true}
       if(!hay)break;
@@ -1635,7 +1640,26 @@ function semCalc(C){
         let dov=0;for(const j of oj)dov+=t.dd[j];if(!(dov>0))continue;
         cand.push({t,st,sc:dov*(1/c-1/(c+st))});
       }
-      if(!cand.length){opt.motivo='sin_palancas';break}
+      if(!cand.length){
+        // Ultima palanca: SKUs que ya llenan su ubicacion medida y reponen mas de una vez
+        // por dia. Se les suma otra ubicacion de picking, si el grupo tiene posiciones
+        // libres por debajo del tope de ocupacion.
+        const ex=[];
+        for(const t of T){
+          const oj=over[t.pool];if(!oj.length||!t.fis||t.g.frio)continue;
+          const upl=t.fis.u/Math.max(1,t.fis.n);if(!(upl>=t.piso))continue;
+          if((t.extra||0)>=8||t.g.libres<=0)continue;
+          const c=t.maxP-t.minP;if(!(c>0))continue;
+          if(t.maxP+t.piso<=t.ub)continue;                 // todavia tiene lugar en lo suyo
+          let dov=0;for(const j of oj)dov+=t.dd[j];if(!(dov/oj.length>c))continue;   // repone mas de 1 vez por dia
+          const add=isNaN(t.B)?Math.floor(upl):floorB(upl,t.B);if(!(add>0))continue;
+          ex.push({t,add,sc:dov*(1/c-1/(c+add))});
+        }
+        if(!ex.length){opt.motivo='sin_palancas';break}
+        ex.sort((a,b)=>b.sc-a.sc);
+        for(const x of ex.slice(0,40)){if(x.t.g.libres<=0)continue;x.t.g.libres--;x.t.extra=(x.t.extra||0)+1;x.t.ub+=x.add;x.t.maxP+=x.add;opt.ubic++;opt.ajustes++}
+        continue;
+      }
       cand.sort((a,b)=>b.sc-a.sc);
       const k=Math.min(80,Math.max(1,Math.ceil(cand.length*0.05)));
       for(const x of cand.slice(0,k)){
@@ -1680,14 +1704,17 @@ function semCalc(C){
       else if(mantiene){acc='OK';motivo='Le sobra Max, pero el grupo tiene lugar: se mantiene para cargar inventario'}
       else{acc='OK';motivo='Ya está bien dimensionado'}
       let entra='';
-      if(V2&&acc==='Subir')entra=noEntra?'No entra ni el Min':(t.fis?'Sí, en su ubicación'+(t.fis.est?' (estimado)':''):(holgado?`Sí, el grupo está al ${pctTxt(g.ocupAct)}`:`Depende de liberar espacio`+(g.ocupAct!=null?` (grupo al ${pctTxt(g.ocupAct)})`:' (sin dato de ubicación)')));
+      if(t.extra){g.extra=(g.extra||0)+t.extra}
+      if(t.extra){acc=acc==='Corregir'?acc:'Subir';motivo=`En su${t.fis.n>1?'s':''} ${t.fis.n} ubicaci${t.fis.n>1?'ones':'ón'} entran ${f0(t.fis.u)} u. para ${nf1.format(r.prom)} u./día: necesita ${t.extra} ubicación${t.extra>1?'es':''} más`}
+      if(V2&&acc==='Subir'&&t.extra)entra=`Necesita ${t.extra} ubicación${t.extra>1?'es':''} de picking más`;
+      else if(V2&&acc==='Subir')entra=noEntra?'No entra ni el Min':(t.fis?'Sí, en su ubicación'+(t.fis.est?' (estimado)':''):(holgado?`Sí, el grupo está al ${pctTxt(g.ocupAct)}`:`Depende de liberar espacio`+(g.ocupAct!=null?` (grupo al ${pctTxt(g.ocupAct)})`:' (sin dato de ubicación)')));
       g.espProp+=maxP*t.v;g.reabProp+=reabProp;
       if(reabAct==null)g.invAct++;else g.reabAct+=reabAct;
       if(t.fis)g.conFis=(g.conFis||0)+1;
       prop.set(r.s,{min:minP,max:maxP});
       sku.push({s:r.s,name:r.name,grp:g.k,area:g.area,flujo:g.flujo,temp:r.temp,batch:r.batch,
         prom:r.prom,pico:r.pico,minAct:r.min,maxAct:r.max,minP,maxP,minT,diasMin,
-        maxFis:t.fis?t.fis.u:null,fisEst:t.fis?t.fis.est:false,entra,
+        maxFis:t.fis?t.fis.u:null,fisEst:t.fis?t.fis.est:false,entra,extra:t.extra||0,
         reabAct,reabProp,acc,motivo,dMin:minP-(r.min||0),dMax:maxP-(r.max||0),libera});
     }
     g.ocupProy=(g.ocupAct!=null&&g.espHoy>0)?Math.min(1,g.ocupAct*g.espProp/g.espHoy):null;
@@ -1749,6 +1776,7 @@ function semDiaHtml(R,C){
   O.forEach((d,j)=>{const okS=d.secos.req<=d.secos.cap,okF=d.frio.req<=d.frio.cap;
     h+=`<tr><td class="l">${fmtD(agg.dates[j],true)}</td><td style="color:${okS?'inherit':'#ff9d97'}">${nf.format(d.secos.req)}</td><td>${nf.format(d.secos.cap)}</td><td style="color:${okF?'inherit':'#ff9d97'}">${nf.format(d.frio.req)}</td><td>${nf.format(d.frio.cap)}</td><td class="l" style="color:${okS&&okF?'#9fe0a8':'#ff9d97'}">${okS&&okF?'✔ Entra':'⚠ Se pasa '+[!okS?`secos +${nf.format(d.secos.req-d.secos.cap)}`:'',!okF?`frío +${nf.format(d.frio.req-d.frio.cap)}`:''].filter(Boolean).join(' · ')}</td></tr>`});
   h+=`</tbody></table></div><div class="note">Optimizador: ${nf.format(o.ajustes||0)} ajustes de Max en ${o.rondas||0} ronda${o.rondas===1?'':'s'}, recalculando contra el simulador cada vez.`+
+    (o.ubic?` Para lograrlo pide <b>${nf.format(o.ubic)} ubicaciones de picking más</b> en ${nf.format(R.sku.filter(x=>x.extra).length)} SKUs de alta rotación (${R.G.filter(g=>g.extra).sort((a,b)=>b.extra-a.extra).slice(0,6).map(g=>g.k+' '+g.extra).join(', ')}); filtrá la tabla por la columna Ubicaciones extra.`:'')+
     (o.dias===0?` <b>Todos los días entran.</b>`:
       ` No alcanza: en el peor día faltan ${o.deficit.secos?nf.format(o.deficit.secos)+' reabastos de secos':''}${o.deficit.secos&&o.deficit.frio?' y ':''}${o.deficit.frio?nf.format(o.deficit.frio)+' de frío':''}.`+
       (o.motivo==='sin_palancas'?` Ya no quedan palancas: todos los SKUs de esa zona están en su techo (lo que entra en la ubicación, los días de frío que fijaste o el ${(OCUP_TOPE*100).toFixed(0)}% de ocupación del grupo). Para entrar hace falta más capacidad de reabasto en esa zona o más espacio.`:''))+`</div>`;
@@ -1832,7 +1860,7 @@ const SEM_COLS=[
   ['Max físico (ubicación)',r=>r.maxFis==null?'':Math.round(r.maxFis)],
   ['Min transición (cargar ya)',r=>Math.round(r.minT)],
   ['Min final (modelo nuevo)',r=>Math.round(r.minP)],['Max objetivo',r=>Math.round(r.maxP)],
-  ['¿Entra ya?',r=>r.entra||''],
+  ['¿Entra ya?',r=>r.entra||''],['Ubicaciones extra',r=>r.extra||''],
   ['Dif. Min',r=>Math.round(r.dMin)],['Dif. Max',r=>Math.round(r.dMax)],
   ['Espacio liberado (u.)',r=>Math.round(r.libera>0?r.libera:0)],
   ['Reab./sem hoy',r=>r.reabAct==null?'':r.reabAct.toFixed(1).replace('.',',')],
@@ -1860,6 +1888,7 @@ function renderSemSku(){
       `<td style="color:#ffd34d"><b>${f0(r.minT)}</b></td>`+
       `<td style="color:${r.dMin<0?'#8ec5ff':'inherit'}"><b>${f0(r.minP)}</b></td><td style="color:${col[r.acc]}"><b>${f0(r.maxP)}</b></td>`+
       `<td class="l" style="color:${/^Sí/.test(r.entra)?'#9fe0a8':(r.entra?'#ff9d97':'inherit')}">${r.entra?esc(r.entra):'—'}</td>`+
+      `<td style="color:${r.extra?'#ffd34d':'inherit'}">${r.extra?'<b>+'+r.extra+'</b>':'—'}</td>`+
       `<td style="color:${r.dMin>0?'#ffd34d':(r.dMin<0?'#8ec5ff':'inherit')}">${r.dMin>0?'+':''}${f0(r.dMin)}</td>`+
       `<td style="color:${r.dMax>0?'#ffd34d':(r.dMax<0?'#8ec5ff':'inherit')}">${r.dMax>0?'+':''}${f0(r.dMax)}</td>`+
       `<td style="color:#8ec5ff">${r.libera>0?f0(r.libera):'—'}</td>`+
@@ -1906,8 +1935,10 @@ function renderSim(){
   R.D.forEach((d,j)=>{const o=R.out[j];const ok=!overDays[j];
     h+=`<tr><td class="l">${fmtD(d,true)}</td><td>${nf.format(Math.round(R.dayTot[j]))}</td><td>${lab('secos',o.secos)}</td><td>${nf.format(o.secos.ej)}</td><td>${nf.format(o.secos.pend)}</td><td>${lab('frio',o.frio)}</td><td>${nf.format(o.frio.ej)}</td><td>${nf.format(o.frio.pend)}</td><td class="l" style="color:${ok?'#9fe0a8':'#ff9d97'}">${ok?'✔ OK':'⚠ Sobre capacidad'}</td></tr>`});
   DT.innerHTML=h+'</tbody>';
-  bars('#chSim',R.D,reqTot,'#f5b800','reabastos');
-  $('#simCap').textContent=`Reabastos requeridos por día (cap. total ${nf.format(capT)}) · línea de capacidad en el resumen superior`;
+  bars('#chSim',R.D,R.out.map(d=>d.secos.req),'#f5b800','reabastos de secos',R.D.map(()=>C.capS));
+  bars('#chSimF',R.D,R.out.map(d=>d.frio.req),'#4f9be8','reabastos de frío',R.D.map(()=>C.capF));
+  $('#simCapF').textContent=`Frío · capacidad ${nf.format(C.capF)} por día`;
+  $('#simCap').textContent=`Secos · capacidad ${nf.format(C.capS)} por día`;
   let th='<thead><tr><th class="l">SKU ID</th><th class="l">SKU Name</th><th class="l">Pool</th><th class="l">Temp.</th><th>Reabastos</th><th>Pico diario</th><th>Min</th><th>Max actual</th><th>Max propuesto</th><th>Faltante (uds)</th></tr></thead><tbody>';
   for(const it of R.suggest.slice(0,300))th+=`<tr><td class="l mono">${it.s}</td><td class="l nm" title="${esc(it.name)}">${esc(it.name)}</td><td class="tc">${it.pool}</td><td class="tc">${esc(it.temp)}</td><td>${nf.format(it.trig)}</td><td>${f0(it.pico)}</td><td>${f0(it.min)}</td><td>${f0(it.max)}</td><td style="color:${it.maxSug>it.max?'#ffd34d':'inherit'}">${f0(it.maxSug)}</td><td>${f0(it.short)}</td></tr>`;
   TP.innerHTML=th+'</tbody>';
