@@ -205,7 +205,7 @@ table.cmp td.hi{color:var(--yellow2)}
   </div>
 </header>
 
-<nav class="tabs"><div class="wrap tabsin"><button class="tabbtn on" data-t="t1">Volumen futuro</button><button class="tabbtn" data-t="t2">Min / Máx</button><button class="tabbtn" data-t="t3">Para revisar</button><button class="tabbtn" data-t="t4">Reabasto semanal</button><button class="tabbtn" data-t="t5">Inventario / coordenadas</button><button class="tabbtn" data-t="t6">Reabasto diario</button></div></nav>
+<nav class="tabs"><div class="wrap tabsin"><button class="tabbtn on" data-t="t1">Volumen futuro</button><button class="tabbtn" data-t="t2">Min / Máx</button><button class="tabbtn" data-t="t3">Revisión masterdata</button><button class="tabbtn" data-t="t4">Reabasto semanal</button><button class="tabbtn" data-t="t5">Inventario / coordenadas</button><button class="tabbtn" data-t="t6">Reabasto diario</button></div></nav>
 <div class="wrap" id="t1">
   <div class="panel">
     <div class="ptitle">Muelle de carga · archivos</div>
@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 03:10</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 03:30</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -1460,19 +1460,36 @@ function simRun(C,ov){
   const cap={secos:C.capS,frio:C.capF},q={secos:[],frio:[]},inQ=new Set(),out=[],dayTot=new Float64Array(nD);
   for(let j=0;j<nD;j++){
     const f=Math.pow(1+C.g,j);
+    // Un SKU puede necesitar varios reabastos en el dia si su demanda supera el ciclo
+    // (Max - Min). Antes se contaba uno solo y el resto quedaba como faltante, lo que
+    // subestimaba la carga de los SKUs de alta rotacion con poco espacio.
     for(const it of items){
       const dd=it.d[j]*f;dayTot[j]+=dd;
-      it.S-=dd;if(it.S<0){it.short+=-it.S;it.S=0}
-      if(it.S<=it.min&&!inQ.has(it)){inQ.add(it);q[it.pool].push(it)}
+      it.S-=dd;
+      if(it.S<=it.min){
+        const cyc=it.maxEff>it.min?it.maxEff-it.min:Math.max(1,it.maxEff);
+        const need=Math.min(30,1+Math.floor((it.min-it.S)/cyc+1e-9));
+        if(need>(it.req||0))it.req=need;
+        if(!inQ.has(it)){inQ.add(it);q[it.pool].push(it)}
+      }
     }
     const day={};
     for(const p of ['secos','frio']){
       const Q=q[p];Q.sort((a,b)=>(a.S/a.maxEff)-(b.S/b.maxEff));
-      const req=Q.length,ej=Math.min(req,cap[p]);
-      for(let k=0;k<ej;k++){const it=Q[k];it.S=it.maxEff;it.trig++;inQ.delete(it)}
-      q[p]=Q.slice(ej);
-      day[p]={req,ej,pend:q[p].length,cap:cap[p]};
+      let req=0;for(const it of Q)req+=it.req||0;
+      let ej=0;
+      // de a un reabasto por SKU por pasada, del mas urgente al menos urgente
+      while(ej<cap[p]){let hizo=false;
+        for(const it of Q){if(ej>=cap[p])break;if(!(it.req>0))continue;
+          const cyc=it.maxEff>it.min?it.maxEff-it.min:Math.max(1,it.maxEff);
+          it.S+=cyc;it.req--;it.trig++;ej++;hizo=true}
+        if(!hizo)break}
+      const rest=[];let pend=0;
+      for(const it of Q){if(it.req>0){rest.push(it);pend+=it.req}else inQ.delete(it)}
+      q[p]=rest;
+      day[p]={req,ej,pend,cap:cap[p]};
     }
+    for(const it of items)if(it.S<0){it.short+=-it.S;it.S=0}   // demanda que no se pudo servir
     out.push(day);
   }
   return {D,out,items,dayTot,excl,noTemp,cap,suggest:items.filter(it=>it.trig>0).sort((a,b)=>b.trig-a.trig||b.short-a.short)};
@@ -1652,11 +1669,13 @@ function semCalc(C){
       // Para cargar inventario nunca se baja el Min de hoy, salvo que no entre.
       const pk=r.pico>0?r.pico:r.prom;
       let minT=Math.max(t.piso,isNaN(t.B)?Math.floor(maxP-pk):floorB(maxP-pk,t.B));
-      if((r.min||0)>minT&&(!t.fis||(r.min||0)+pk<=t.fis.u))minT=r.min||0;
+      // El Min de hoy se respeta solo si no pasa el Max objetivo: un Min de la V L mal
+      // cargado (por ejemplo 260 con demanda 0,3/dia) no puede volverse la propuesta.
+      if((r.min||0)>minT&&(r.min||0)<=maxP-pk&&(!t.fis||(r.min||0)+pk<=t.fis.u))minT=r.min||0;
       let acc,motivo;
       if(reabAct==null){acc='Corregir';motivo=diasMin>3?`Max ≤ Min y el Min cubre ${nf1.format(diasMin)} días de demanda`:'Hoy el Max no supera al Min'}
       else if(vlNoEntra){acc='Bajar';motivo=`El Max de la V L (${f0(r.max)}) no entra en su ubicación: caben ${f0(t.fis.u)} u.`+(t.fis.est?' (estimado)':'')}
-      else if(maxP>r.max*1.05){acc='Subir';motivo=`Rota mucho: pasa de ${nf1.format(reabAct)} a ${nf1.format(reabProp)} reabastos por semana`}
+      else if(maxP>r.max*1.05){acc='Subir';motivo=`Más Max: pasa de ${nf1.format(reabAct)} a ${nf1.format(reabProp)} reabastos por semana`}
       else if(maxP<r.max*0.85){acc='Bajar';motivo=g.frio?`Frío no crece: cede ${f0(libera)} u. a los SKUs que más rotan`:`Grupo al ${pctTxt(g.ocupAct)}: cede ${f0(libera)} u. a los que más rotan`}
       else if(mantiene){acc='OK';motivo='Le sobra Max, pero el grupo tiene lugar: se mantiene para cargar inventario'}
       else{acc='OK';motivo='Ya está bien dimensionado'}
@@ -1860,7 +1879,7 @@ function renderSim(){
   if(!agg||!agg.dates.length||!mm){KP.innerHTML='';W.innerHTML='';DT.innerHTML='<tr><td class="empty">Cargá el plan y la V L para correr el simulador.</td></tr>';TP.innerHTML='';return}
   if(!simInit){simInit=true}
   mmCalc();
-  const C=simCfg();const R=simRun(C);const nD=R.D.length;
+  const C=simCfg();const R=simRun(C,'vl');const nD=R.D.length;
   const reqTot=R.out.map(d=>d.secos.req+d.frio.req);
   const avgReq=reqTot.reduce((a,b)=>a+b,0)/nD;
   const overDays=R.out.map((d,j)=>d.secos.req>d.secos.cap||d.frio.req>d.frio.cap);
@@ -1875,10 +1894,10 @@ function renderSim(){
     ['Cola al último día',nf.format(pendEnd),'reabastos que quedan sin hacer'],
     ['Faltante estimado',nf.format(Math.round(short)),'unidades sin stock en picking (acum.)'],
   ].map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
-  $('#simNote').textContent=`Demanda: plan cargado (${R.items.length} SKUs con demanda y Max) · Fruver va a ${C.fr==='frio'?'frío':'secos'} · Crecimiento ${nf1.format(C.g*100)}% diario · Min/Máx de la solapa Min / Máx · Reabasto llega el mismo día y lleva el stock al Max · Stock inicial = Max · Excluidos: ${R.excl} sin Max o Max 0, ${R.noTemp} sin temperatura.`;
+  $('#simNote').textContent=`Demanda: plan cargado (${R.items.length} SKUs con demanda y Max) · Fruver va a ${C.fr==='frio'?'frío':'secos'} · Crecimiento ${nf1.format(C.g*100)}% diario · Min/Max de la V L (hoy) · Reabasto llega el mismo día y repone de a un ciclo (Max − Min) · Stock inicial repartido entre Min y Max · Excluidos: ${R.excl} sin Max o Max 0, ${R.noTemp} sin temperatura.`;
   if(nOver){
     const worst=R.suggest.slice(0,15);
-    W.innerHTML=`<div class="warn"><b>⚠ ${nOver} de ${nD} días superan la capacidad de ${nf.format(capT)} reabastos/día.</b> Con los Min/Máx de la solapa Min / Máx, la cola crece y quedan ${nf.format(pendEnd)} reabastos pendientes al cierre. Para entrar en capacidad, conviene subir el Max de los SKUs que más reabastos generan, hasta cubrir su pico diario.</div>`;
+    W.innerHTML=`<div class="warn"><b>⚠ ${nOver} de ${nD} días superan la capacidad de ${nf.format(capT)} reabastos/día.</b> Con los Min/Max de la V L de hoy, la cola crece y quedan ${nf.format(pendEnd)} reabastos pendientes al cierre. La propuesta que entra en capacidad está arriba, en la recomendación por grupo y por SKU.</div>`;
   } else {
     W.innerHTML=`<div class="warn" style="border-color:#24502f;background:#16241b;color:#9fe0a8">✔ Dentro de capacidad todos los días con esta configuración.</div>`;
   }
