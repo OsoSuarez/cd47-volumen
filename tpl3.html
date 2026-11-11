@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 00:05</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 00:10</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -1600,7 +1600,7 @@ function renderSem(C){
     const topados=R.G.filter(g=>!g.fijo&&g.doiTope!=null&&g.doi>=g.doiTope-1e-9&&faltan.indexOf(g.pool)>=0).map(g=>g.k);
     W.innerHTML=`<div class="warn"><b>⚠ ${faltan.map(p=>p==='secos'?'Secos':'Frío').join(' y ')} no entra${faltan.length>1?'n':''} en capacidad ni subiendo el Max al máximo permitido.</b> `+
       (topados.length?`Estos grupos ya llegaron al tope de ${(OCUP_TOPE*100).toFixed(0)}% de ocupación y no pueden crecer más: ${topados.slice(0,12).join(', ')}. `:'')+
-      `Las salidas son sumar gente a la ventana de reabasto, liberar espacio en esos grupos, o aceptar los ${nf.format(Math.round(propT-capT))} reabastos de más.</div>`;
+      `Las salidas son sumar gente a la ventana de reabasto, liberar espacio en esos grupos, o aceptar los ${nf.format(Math.round(faltan.reduce((a,p)=>a+(R.tot[p]-R.capSem[p]),0)))} reabastos de más.</div>`;
   }
   $('#semNote').textContent=`Frío fijo: congelados 1,5 días (CON, CONMFC, CLP) y refrigerados 2 días (REF, REFMFC, LP, TF, FYV). El resto sube sólo hasta ${(OCUP_TOPE*100).toFixed(0)}% de ocupación proyectada, de a ${String(PASO_DOI).replace('.',',')} días, priorizando el grupo que más reabastos ahorra. Un reabasto cubre Max − Min unidades, así que los reabastos de la semana son la demanda semanal dividida ese ciclo.`;
 
