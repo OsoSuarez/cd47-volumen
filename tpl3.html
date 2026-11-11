@@ -61,8 +61,10 @@ h1 span{color:var(--yellow)}
 .x{background:none;border:1px solid var(--line);color:var(--ink2);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:16px}
 .x:hover{border-color:var(--red);color:var(--red)}
 .prog{height:22px;position:relative;margin-top:6px;background:#15181c;border-radius:4px;overflow:hidden}
-.prog .bar{position:absolute;left:0;top:0;bottom:0;background:repeating-linear-gradient(-45deg,#5c4a10 0 8px,#4a3c0e 8px 16px);transition:width .1s}
-.prog .mini{position:absolute;top:1px;width:30px;height:20px;transition:left .1s}
+.prog .bar{position:absolute;left:0;top:0;bottom:0;background:repeating-linear-gradient(-45deg,#e07b24 0 8px,#b85f10 8px 16px);background-size:22px 22px;animation:stripes 0.5s linear infinite;transition:width .3s}
+@keyframes stripes{0%{background-position:0 0}100%{background-position:22px 0}}
+@keyframes forklift-bounce{0%{transform:translateY(0px)}100%{transform:translateY(-3px)}}
+.prog .mini{position:absolute;top:-2px;width:36px;height:26px;transition:left .3s;filter:drop-shadow(0 0 4px #e07b24);animation:forklift-bounce 0.4s ease-in-out infinite alternate}
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .toolbar label{color:var(--ink2);font-size:12.5px;text-transform:uppercase;letter-spacing:.5px}
 select,input[type=search]{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 10px;font:inherit}
@@ -861,44 +863,31 @@ fi.onchange=()=>{addFiles([...fi.files]);fi.value=''};
 drop.addEventListener('drop',e=>addFiles([...e.dataTransfer.files]));
 $('#files').onclick=e=>{const b=e.target.closest('.x');if(!b)return;files=files.filter(f=>f.id!=+b.dataset.id);recompute()};
 $('#clearAll').onclick=()=>{files=[];recompute()};
-$('#btnCargar').onclick=async()=>{
+$('#btnCargar').onclick=()=>{
   const btn=$('#btnCargar');
   const orig=btn.innerHTML;
-  btn.disabled=true;
+  btn.disabled=true;btn.innerHTML='⏳ Cargando…';
   const base='http://localhost:9747';
-  async function fetchWithProgress(url,label){
-    const resp=await fetch(url);
-    if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
-    const total=+resp.headers.get('Content-Length')||0;
-    const reader=resp.body.getReader();
-    const chunks=[];let loaded=0;
-    while(true){
-      const {done,value}=await reader.read();
-      if(done)break;
-      chunks.push(value);loaded+=value.length;
-      const pct=total?Math.round(loaded/total*100):null;
-      btn.innerHTML=pct!=null?`⏳ ${label} ${pct}%`:`⏳ ${label}…`;
-    }
-    return new Blob(chunks);
-  }
-  try{
-    btn.innerHTML='⏳ Conectando…';
-    const manifest=await fetch(`${base}/manifest`).then(r=>r.json());
-    const ts=manifest.ts;
-    if(ts){localStorage.setItem('cd47_last_load',ts);updateLastLoad(ts);}
-    const fakeFiles=[];
-    for(const f of manifest.files){
-      const short=f.name.includes('secos')?'Secos':'RyC';
-      const blob=await fetchWithProgress(f.url,short);
-      fakeFiles.push(new File([blob],f.name,{type:'text/csv'}));
-    }
-    await addFiles(fakeFiles);
-    fetch(`${base}/done`).catch(()=>{});
-    btn.disabled=false;btn.innerHTML=orig;
-  }catch(err){
-    btn.disabled=false;btn.innerHTML=orig;
-    const m=document.getElementById('cargarModal');m.style.display='flex';
-  }
+  fetch(`${base}/manifest`)
+    .then(r=>r.json())
+    .then(async manifest=>{
+      const ts=manifest.ts;
+      if(ts){localStorage.setItem('cd47_last_load',ts);updateLastLoad(ts);}
+      const fakeFiles=[];
+      for(const f of manifest.files){
+        const resp=await fetch(f.url);
+        if(!resp.ok)throw new Error(`No se pudo descargar ${f.name}`);
+        const blob=await resp.blob();
+        fakeFiles.push(new File([blob],f.name,{type:'text/csv'}));
+      }
+      await addFiles(fakeFiles);
+      fetch(`${base}/done`).catch(()=>{});
+      btn.disabled=false;btn.innerHTML=orig;
+    })
+    .catch(()=>{
+      btn.disabled=false;btn.innerHTML=orig;
+      const m=document.getElementById('cargarModal');m.style.display='flex';
+    });
 };
 document.getElementById('cargarModal').addEventListener('click',function(e){if(e.target===this)this.style.display='none'});
 document.querySelector('#cargarCmd').addEventListener('click',()=>{
