@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-10 23:22</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-10 23:25</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -680,15 +680,13 @@ function recompute(){
   const merged=new Map();
   for(const f of files){if(f.status!=='ok')continue;f.newK=0;f.overK=0;const R=f.recs;
     for(let i=0;i<R.length;i+=4){const k=R[i]+'|'+R[i+1]+'|'+R[i+2];if(merged.has(k))f.overK++;else f.newK++;merged.set(k,R[i+3])}}
-  // Fecha local, no UTC: con toISOString() a partir de las 21 h de Buenos Aires
-  // ya es el dia siguiente en UTC y se descartaba la jornada de hoy.
-  const _n=new Date();const todayStr=new Date(_n.getTime()-_n.getTimezoneOffset()*6e4).toISOString().slice(0,10);
-  const dates=[...new Set([...merged.keys()].map(k=>k.split('|')[2]))].filter(d=>d>=todayStr).sort();
+  // Se muestran todas las fechas que trae el archivo, sin recortar las pasadas.
+  const dates=[...new Set([...merged.keys()].map(k=>k.split('|')[2]))].sort();
   const di=new Map(dates.map((d,i)=>[d,i]));const whs=new Set();
   const M={w:[],s:[],d:[],q:[]};
-  // 'dates' descarta las fechas anteriores a hoy, asi que di.get(d) es undefined para
-  // esos registros. Si se empujaban igual, mas abajo dT[undefined].add() reventaba y
-  // recompute() cortaba dejando el archivo cargando para siempre.
+  // Guarda: si alguna vez 'dates' no contiene la fecha de un registro, di.get(d) da
+  // undefined y mas abajo dT[undefined].add() revienta, dejando el archivo cargando
+  // para siempre (recompute se llama fuera del try de addFiles).
   for(const [k,qv] of merged){const [w,s,d]=k.split('|');whs.add(+w);if(!(qv>0))continue;const j=di.get(d);if(j===undefined)continue;M.w.push(+w);M.s.push(+s);M.d.push(j);M.q.push(qv)}
   const temps=[...new Set(M.s.map(s=>(skus.get(s)?.temp)||'Sin dato'))].sort(tSort);
   const dT=dates.map(()=>new Set());for(let i=0;i<M.s.length;i++)dT[M.d[i]].add((skus.get(M.s[i])?.temp)||'Sin dato');
