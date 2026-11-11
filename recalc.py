@@ -52,7 +52,8 @@ iu, itp, ip = col(H, 'Ubicacion'), col(H, 'TipoProducto'), col(H, 'Piso')
 isel, iz = col(H, 'Seleccion'), col(H, 'Zona piso')
 if min(iu, itp, ip) < 0:
     sys.exit('Faltan columnas en CORDENADAS (Ubicacion, TipoProducto, Piso)')
-picks, E = {}, defaultdict(int)
+picks, E, CAPU = {}, defaultdict(int), {}
+icap, itipo = col(H, 'Capacidad Cubica'), col(H, 'Tipo')
 for r in rows:
     u = get(r, iu)
     if not u or not is_one(get(r, ip)):
@@ -62,6 +63,12 @@ for r in rows:
         continue
     tp = get(r, itp).upper()
     picks[u] = tp
+    # 1000 es el valor por defecto de la planilla, no una medicion: se trata como sin dato
+    c = pnum(get(r, icap)) if icap >= 0 else None
+    # Solo ubicaciones de picking de verdad: Tipo = picking y fuera las de ALMACENAMIENTO MFC
+    es_pick = (itipo < 0 or get(r, itipo).strip().lower() == 'picking') and not tp.startswith('ALMACENAMIENTO')
+    if es_pick:
+        CAPU[u] = c if (c is not None and c > 0 and c != 1000) else None
     if not is_yes(get(r, isel)):
         E[pool(tp)] += 1
 
@@ -110,6 +117,27 @@ for u, s in occ.items():
     if s > 0:
         F[pool(picks[u])] += 1
 
+# 2a) Capacidad cubica de picking por SKU: suma de sus ubicaciones de Piso 1,
+# repartiendo cada ubicacion compartida en partes iguales entre sus SKUs.
+skus_u = defaultdict(set)
+for r in rows:
+    sku = int(re.sub(r'\D', '', get(r, ie)) or 0)
+    u, z = get(r, iu), get(r, iz)
+    if not sku or u not in CAPU or excl(z) or difer(z, u):
+        continue
+    skus_u[u].add(sku)
+UB = defaultdict(lambda: [0.0, 0, 0])
+for u, ss in skus_u.items():
+    c = CAPU.get(u)
+    for sku in ss:
+        x = UB[sku]
+        x[1] += 1
+        if c:
+            x[0] += c / len(ss)
+            x[2] += 1
+print('UBIC: %d SKUs con ubicacion de picking · %d con capacidad real en todas sus ubicaciones' %
+      (len(UB), sum(1 for x in UB.values() if x[2] == x[1] and x[1] > 0)))
+
 # 2b) Almacenamiento (Area = almacenamiento) y cruce sync_id -> SKU para la solapa de reabasto
 ALM, SYNC = defaultdict(float), {}
 isync, ia2 = col(H, 'sync_id'), ia
@@ -155,6 +183,7 @@ tpl = patch(tpl, 'OCUP', OCUP)
 alm_out = {str(k): (int(v) if float(v).is_integer() else v) for k, v in ALM.items() if v > 0}
 tpl = patch(tpl, 'ALM', alm_out)
 tpl = patch(tpl, 'SYNC', {str(k): v for k, v in SYNC.items()})
+tpl = patch(tpl, 'UBIC', {str(k): [round(v[0]), v[1], v[2]] for k, v in UB.items()})
 tpl, n = re.subn(r'id="invFecha" value="\d{4}-\d{2}-\d{2}"', 'id="invFecha" value="%s"' % FECHA, tpl, count=1)
 if n != 1:
     sys.exit('No encontré el campo de fecha')
