@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 05:30</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 05:45</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -1809,11 +1809,16 @@ function semCalc(C){
   const simHoy=resumen(simRun(C,V2?hoyFis:'vl'),true),simProp=resumen(SP,false);
   // Transicion: la semana con la logica de reabasto de hoy, Min de la V L contra Min de transicion
   const minTm=new Map(sku.map(x=>[x.s,x.minT]));
+  // La transicion solo se puede cumplir si hay mercaderia en almacenamiento para
+  // llevar picking hasta el Min de transicion mas el pico del dia.
+  let faltaAlm=0,uFaltaAlm=0;
+  for(const x of sku){const need=(x.minT||0)+(x.pico||0)-(+STK[String(x.s)]||0);const alm=+ALM[String(x.s)]||0;
+    if(need>alm){faltaAlm++;uFaltaAlm+=need-alm;x.faltaAlm=Math.round(need-alm)}}
   const trHoy=transRun(C,(s,info)=>isNaN(info.min)?0:info.min);
   const trProp=transRun(C,(s,info)=>minTm.has(s)?minTm.get(s):(isNaN(info.min)?0:info.min));
   return {G:lista,sku,capSem:{secos:C.capS*nD,frio:C.capF*nD},tot,totAct,nD,simHoy,simProp,trHoy,trProp,v2:V2,
     conFis:sku.filter(x=>x.maxFis!=null).length,noEntra:sku.filter(x=>x.maxFis!=null&&(x.maxAct||0)>x.maxFis).length,
-    reabRaw:lista.reduce((a,g)=>a+(g.reabRaw||0),0),opt,spOut:SP.out};
+    reabRaw:lista.reduce((a,g)=>a+(g.reabRaw||0),0),opt,spOut:SP.out,faltaAlm,uFaltaAlm};
 }
 
 // Logica de reabasto de hoy: si el stock de picking no alcanza para la demanda del dia,
@@ -1854,7 +1859,7 @@ function semDiaHtml(R,C){
     (o.dias===0?` <b>Todos los días entran.</b>`:
       ` No alcanza: en el peor día faltan ${o.deficit.secos?nf.format(o.deficit.secos)+' reabastos de secos':''}${o.deficit.secos&&o.deficit.frio?' y ':''}${o.deficit.frio?nf.format(o.deficit.frio)+' de frío':''}.`+
       (o.motivo==='sin_palancas'?` Ya no quedan palancas: todos los SKUs de esa zona están en su techo (lo que entra en la ubicación, los días de frío que fijaste o el ${(OCUP_TOPE*100).toFixed(0)}% de ocupación del grupo).`:''))+
-    (o.frio?`<br><b>Frío no entra con los días que fijaste, y no es un problema de Min/Max:</b> su demanda viene en picos (muchos SKUs se piden un solo día por semana). El ${fmtD(o.frio.diaPico,true)} piden reabasto <b>${nf.format(o.frio.activos)} SKUs de frío distintos</b>; aunque cada uno reponga una sola vez, ese es el piso, y la capacidad es ${nf.format(C.capF)}. Probé más días de frío, más batches para los lentos y Min sobre el promedio: ninguno lo baja de ${nf.format(o.frioPico?o.frioPico.pico:o.frio.pico+C.capF)} ese día. Las salidas que sí funcionan: (1) <b>sumar capacidad en frío</b>, en promedio ${nf.format(o.frio.extraDia)} reabastos más por día (unas ${nf1.format(o.frio.horasDia)} horas-persona) y ${nf.format(o.frio.pico)} en el peor día (unas ${nf1.format(o.frio.horasPico)} horas-persona); o (2) <b>anticipar</b>: el día anterior a un pico, reponer hasta el Max los SKUs de frío que se van a pedir, para correr parte de la carga a un día más liviano.`:'')+`</div>`;
+    (o.frio?`<br><b>Frío no entra con los días que fijaste, y no es un problema de Min/Max:</b> su demanda viene en picos (muchos SKUs se piden un solo día por semana). El ${fmtD(o.frio.diaPico,true)} tienen pedidos <b>${nf.format(o.frio.activos)} SKUs de frío distintos</b>, y con estos Min/Max unos ${nf.format(o.frio.pico+C.capF)} necesitan reabasto ese día contra una capacidad de ${nf.format(C.capF)}. Probé más días de frío, más batches para los lentos y Min sobre el promedio: ninguno lo baja de ${nf.format(o.frioPico?o.frioPico.pico:o.frio.pico+C.capF)}, porque cuando la demanda de la semana llega en un solo día, el reabasto cae ese mismo día. Las salidas que sí funcionan: (1) <b>sumar capacidad en frío</b>, en promedio ${nf.format(o.frio.extraDia)} reabastos más por día (unas ${nf1.format(o.frio.horasDia)} horas-persona) y ${nf.format(o.frio.pico)} en el peor día (unas ${nf1.format(o.frio.horasPico)} horas-persona); o (2) <b>anticipar</b>: el día anterior a un pico, reponer hasta el Max los SKUs de frío que se van a pedir, para correr parte de la carga a un día más liviano.`:'')+`</div>`;
   return h;
 }
 
@@ -1867,7 +1872,8 @@ function semTransHtml(R,C){
   agg.dates.forEach((d,j)=>{const a=A.out[j],b=B.out[j];
     h+=`<tr><td class="l">${fmtD(d,true)}</td><td>${nf.format(C.capS)}</td>${c(a.secos,C.capS)}${c(b.secos,C.capS)}<td>${nf.format(C.capF)}</td>${c(a.frio,C.capF)}${c(b.frio,C.capF)}<td>${nf.format(Math.round(b.u))}</td></tr>`});
   h+=`<tr class="tot"><td class="l">Semana</td><td></td><td>${nf.format(A.out.reduce((x,o)=>x+o.secos,0))}</td><td>${nf.format(B.out.reduce((x,o)=>x+o.secos,0))}</td><td></td><td>${nf.format(A.out.reduce((x,o)=>x+o.frio,0))}</td><td>${nf.format(B.out.reduce((x,o)=>x+o.frio,0))}</td><td>${nf.format(Math.round(B.u))}</td></tr></tbody></table></div>`+
-    `<div class="note">Con Min de la V L: <b>${A.dias} de ${R.nD} días</b> sobre capacidad. Con Min de transición: <b>${B.dias} de ${R.nD} días</b>. Stock en picking al cierre de la semana: ${nf.format(Math.round(A.stockFin))} u. con la V L contra <b>${nf.format(Math.round(B.stockFin))} u.</b> con transición (hoy hay ${nf.format(Math.round(A.stockIni))} u.).</div></div>`;
+    `<div class="note">Con Min de la V L: <b>${A.dias} de ${R.nD} días</b> sobre capacidad. Con Min de transición: <b>${B.dias} de ${R.nD} días</b>. Stock en picking al cierre de la semana: ${nf.format(Math.round(A.stockFin))} u. con la V L contra <b>${nf.format(Math.round(B.stockFin))} u.</b> con transición (hoy hay ${nf.format(Math.round(A.stockIni))} u.).</div>`+
+    (R.faltaAlm?`<div class="warn">⚠ <b>${nf.format(R.faltaAlm)} SKUs no tienen hoy suficiente stock en almacenamiento</b> para llevar picking a su Min de transición: faltan ${nf.format(Math.round(R.uFaltaAlm))} u. en total. Para esos, la transición depende de lo que entre de proveedores; la columna "Falta en almacenamiento" de la tabla dice cuánto.</div>`:'')+`</div>`;
   return h;
 }
 
@@ -1935,7 +1941,7 @@ const SEM_COLS=[
   ['Max físico (ubicación)',r=>r.maxFis==null?'':Math.round(r.maxFis)],
   ['Min transición (cargar ya)',r=>Math.round(r.minT)],
   ['Min final (modelo nuevo)',r=>Math.round(r.minP)],['Max objetivo',r=>Math.round(r.maxP)],
-  ['¿Entra ya?',r=>r.entra||''],['Ubicaciones extra',r=>r.extra||''],
+  ['¿Entra ya?',r=>r.entra||''],['Ubicaciones extra',r=>r.extra||''],['Falta en almacenamiento (u.)',r=>r.faltaAlm||''],
   ['Dif. Min',r=>Math.round(r.dMin)],['Dif. Max',r=>Math.round(r.dMax)],
   ['Espacio liberado (u.)',r=>Math.round(r.libera>0?r.libera:0)],
   ['Reab./sem hoy',r=>r.reabAct==null?'':r.reabAct.toFixed(1).replace('.',',')],
@@ -1964,6 +1970,7 @@ function renderSemSku(){
       `<td style="color:${r.dMin<0?'#8ec5ff':'inherit'}"><b>${f0(r.minP)}</b></td><td style="color:${col[r.acc]}"><b>${f0(r.maxP)}</b></td>`+
       `<td class="l" style="color:${/^Sí/.test(r.entra)?'#9fe0a8':(r.entra?'#ff9d97':'inherit')}">${r.entra?esc(r.entra):'—'}</td>`+
       `<td style="color:${r.extra?'#ffd34d':'inherit'}">${r.extra?'<b>+'+r.extra+'</b>':'—'}</td>`+
+      `<td style="color:${r.faltaAlm?'#ff9d97':'inherit'}">${r.faltaAlm?f0(r.faltaAlm):'—'}</td>`+
       `<td style="color:${r.dMin>0?'#ffd34d':(r.dMin<0?'#8ec5ff':'inherit')}">${r.dMin>0?'+':''}${f0(r.dMin)}</td>`+
       `<td style="color:${r.dMax>0?'#ffd34d':(r.dMax<0?'#8ec5ff':'inherit')}">${r.dMax>0?'+':''}${f0(r.dMax)}</td>`+
       `<td style="color:#8ec5ff">${r.libera>0?f0(r.libera):'—'}</td>`+
