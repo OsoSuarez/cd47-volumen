@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-10 22:58</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-10 23:05</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -684,7 +684,10 @@ function recompute(){
   const dates=[...new Set([...merged.keys()].map(k=>k.split('|')[2]))].filter(d=>d>=todayStr).sort();
   const di=new Map(dates.map((d,i)=>[d,i]));const whs=new Set();
   const M={w:[],s:[],d:[],q:[]};
-  for(const [k,qv] of merged){const [w,s,d]=k.split('|');whs.add(+w);if(!(qv>0))continue;M.w.push(+w);M.s.push(+s);M.d.push(di.get(d));M.q.push(qv)}
+  // 'dates' descarta las fechas anteriores a hoy, asi que di.get(d) es undefined para
+  // esos registros. Si se empujaban igual, mas abajo dT[undefined].add() reventaba y
+  // recompute() cortaba dejando el archivo cargando para siempre.
+  for(const [k,qv] of merged){const [w,s,d]=k.split('|');whs.add(+w);if(!(qv>0))continue;const j=di.get(d);if(j===undefined)continue;M.w.push(+w);M.s.push(+s);M.d.push(j);M.q.push(qv)}
   const temps=[...new Set(M.s.map(s=>(skus.get(s)?.temp)||'Sin dato'))].sort(tSort);
   const dT=dates.map(()=>new Set());for(let i=0;i<M.s.length;i++)dT[M.d[i]].add((skus.get(M.s[i])?.temp)||'Sin dato');
   const partial=dT.map(x=>x.size<temps.length);
@@ -905,7 +908,7 @@ document.querySelector('#cargarCmd').addEventListener('click',()=>{
 $('#btnBot').onclick=()=>{const m=document.getElementById('botModal');m.style.display='flex'};
 document.getElementById('botModal').addEventListener('click',function(e){if(e.target===this)this.style.display='none'});
 // When user copies the command → flag bot as running
-document.querySelector('#botModal .mono').addEventListener('click',()=>{
+document.querySelector('#botModal .mono')?.addEventListener('click',()=>{
   localStorage.setItem('cd47_bot_running','1');
   setBotRunning(true);
 });
