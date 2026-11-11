@@ -648,6 +648,9 @@ async function parseXLSX(file,f,onProg){
 async function addFiles(list){
   for(const file of list){
     const f={id:++fileSeq,name:file.name,status:'load',recs:[],rows:0,whs:new Set(),dates:new Set(),skuSet:new Set(),temps:new Set(),prog:0};
+    // Si ya existe un archivo con el mismo nombre, reemplazarlo en lugar de duplicar
+    const existIdx=files.findIndex(x=>x.name===file.name);
+    if(existIdx>=0)files.splice(existIdx,1);
     files.push(f);renderFiles();
     try{
       if(file.size===0)throw new Error('El archivo está vacío (0 bytes). Volvé a exportarlo/subirlo.');
