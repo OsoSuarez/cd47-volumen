@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-10 23:55</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 00:05</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -1510,7 +1510,10 @@ function semCalc(C){
     const ciclo=maxP-minP,dem=r.prom*fSem;
     return {maxP,minP,ciclo,reab:ciclo>0?dem/ciclo:NaN};
   };
+  // Un SKU con Max <= Min no tiene ciclo: no se puede estimar su reabasto y NO
+  // se cuenta como cero, porque eso disfrazaba de ahorro una configuracion rota.
   const reabGrp=(g,doi)=>{let t=0;for(const r of g.items){const x=reabSku(r,doi,!g.frio);if(isFinite(x.reab))t+=x.reab}return t};
+  const invGrp=(g,doi)=>{let n=0;for(const r of g.items){const x=reabSku(r,doi,!g.frio);if(!isFinite(x.reab))n++}return n};
 
   for(const g of G.values()){
     g.reabAct=reabGrp(g,null);
@@ -1555,6 +1558,7 @@ function semCalc(C){
   const sku=[];
   for(const g of G.values()){
     g.reabProp=reabGrp(g,g.doi);
+    g.invAct=invGrp(g,null);g.invProp=invGrp(g,g.doi);
     const o=g.occ;
     g.ocupAct=(o&&o.E>0)?o.F/o.E:null;
     g.ocupProy=(o&&o.E>0&&o.F>0&&g.doiAct>0)?Math.min(o.E,o.F*g.doi/g.doiAct)/o.E:null;
@@ -1583,6 +1587,12 @@ function renderSem(C){
     ['Reabastos evitados',nf.format(Math.round(ahorro)),actT>0?`${nf1.format(ahorro/actT*100)}% menos`:'—'],
   ].map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
 
+  const invTot=R.G.reduce((a,g)=>a+g.invProp,0),invHoy=R.G.reduce((a,g)=>a+g.invAct,0);
+  if(invTot>invHoy){
+    const peores=R.G.filter(g=>g.invProp>g.invAct).sort((a,b)=>(b.invProp-b.invAct)-(a.invProp-a.invAct)).slice(0,6).map(g=>`${g.k} (${g.invProp})`);
+    W.innerHTML=`<div class="warn" style="border-color:#5a2a2a;background:#2a1818"><b>⚠ La propuesta dejaría ${nf.format(invTot)} SKUs con el Max por debajo del Min</b> (hoy son ${nf.format(invHoy)}). Esos SKUs no tienen ciclo de reabasto, así que no entran en ningún total: el ahorro que se ve abajo los ignora. Antes de cargar nada, hay que revisar el Min de la V L en ${peores.join(', ')}.</div>`;
+    return;
+  }
   const faltan=['secos','frio'].filter(p=>R.tot[p]>R.capSem[p]);
   if(!faltan.length){
     W.innerHTML=`<div class="warn" style="border-color:#24502f;background:#16241b;color:#9fe0a8">✔ Con los días de inventario propuestos, la semana entra en capacidad.</div>`;
@@ -1594,7 +1604,7 @@ function renderSem(C){
   }
   $('#semNote').textContent=`Frío fijo: congelados 1,5 días (CON, CONMFC, CLP) y refrigerados 2 días (REF, REFMFC, LP, TF, FYV). El resto sube sólo hasta ${(OCUP_TOPE*100).toFixed(0)}% de ocupación proyectada, de a ${String(PASO_DOI).replace('.',',')} días, priorizando el grupo que más reabastos ahorra. Un reabasto cubre Max − Min unidades, así que los reabastos de la semana son la demanda semanal dividida ese ciclo.`;
 
-  let h='<thead><tr><th class="l">Grupo</th><th class="l">Área</th><th class="l">Flujo</th><th class="l">Pool</th><th>SKUs</th><th>Ocup. actual</th><th>DOI actual</th><th>DOI propuesto</th><th>Ocup. proyectada</th><th>Reab./sem hoy</th><th>Reab./sem propuesto</th><th>Evitados</th></tr></thead><tbody>';
+  let h='<thead><tr><th class="l">Grupo</th><th class="l">Área</th><th class="l">Flujo</th><th class="l">Pool</th><th>SKUs</th><th>Ocup. actual</th><th>DOI actual</th><th>DOI propuesto</th><th>Ocup. proyectada</th><th>Reab./sem hoy</th><th>Reab./sem propuesto</th><th>Evitados</th><th title="SKUs que quedarían con Max por debajo del Min: no tienen ciclo de reabasto y no se pueden estimar">Sin ciclo</th></tr></thead><tbody>';
   for(const g of R.G){
     const ev=g.reabAct-g.reabProp;
     const tope=!g.fijo&&g.doiTope!=null&&g.doi>=g.doiTope-1e-9;
@@ -1603,7 +1613,8 @@ function renderSem(C){
        `<td>${pctTxt(g.ocupAct)}</td><td>${g.doiAct==null?'—':nf1.format(g.doiAct)}</td>`+
        `<td style="color:#ffd34d"><b>${nf1.format(g.doi)}</b></td><td>${pctTxt(g.ocupProy)}</td>`+
        `<td>${nf.format(Math.round(g.reabAct))}</td><td>${nf.format(Math.round(g.reabProp))}</td>`+
-       `<td style="color:${ev>0.5?'#9fe0a8':'inherit'}">${ev>0.5?'−'+nf.format(Math.round(ev)):'—'}</td></tr>`;
+       `<td style="color:${ev>0.5?'#9fe0a8':'inherit'}">${ev>0.5?'−'+nf.format(Math.round(ev)):'—'}</td>`+
+       `<td style="color:${g.invProp>g.invAct?'#ff9d97':'inherit'}">${g.invProp?nf.format(g.invProp)+(g.invProp>g.invAct?' ⚠':''):'—'}</td></tr>`;
   }
   GR.innerHTML=h+'</tbody>';
 
