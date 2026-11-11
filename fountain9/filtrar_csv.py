@@ -38,12 +38,24 @@ def guardar_csv_filtrado(df: pd.DataFrame, nombre: str):
 
 
 def main():
-    csvs = sorted(OUT.glob("All - Fixed Schedule Replenishment Plan *.csv"),
-                  key=lambda p: p.stat().st_mtime)
-    if len(csvs) < 2:
-        sys.exit(f"ERROR: se esperaban 2 CSV en {OUT}/, se encontraron {len(csvs)}")
+    # run_planes.py guarda los planes como "plan_1_All - Fixed Schedule..." y
+    # "plan_2_All - Fixed Schedule...". El glob viejo exigia que el nombre
+    # EMPEZARA con "All - ", asi que no los encontraba y filtraba planes viejos.
+    def mas_nuevo(patron):
+        hits = sorted(OUT.glob(patron), key=lambda p: p.stat().st_mtime)
+        return hits[-1] if hits else None
 
-    secos_path, ryc_path = csvs[-2], csvs[-1]
+    secos_path = mas_nuevo("plan_1_*Fixed Schedule Replenishment Plan*.csv")
+    ryc_path   = mas_nuevo("plan_2_*Fixed Schedule Replenishment Plan*.csv")
+
+    if not (secos_path and ryc_path):
+        # Respaldo: nombres viejos, los dos mas recientes por fecha de modificacion.
+        csvs = sorted(OUT.glob("*Fixed Schedule Replenishment Plan*.csv"),
+                      key=lambda p: p.stat().st_mtime)
+        csvs = [c for c in csvs if not c.name.startswith("filtrado_")]
+        if len(csvs) < 2:
+            sys.exit(f"ERROR: se esperaban 2 CSV de plan en {OUT}/, se encontraron {len(csvs)}")
+        secos_path, ryc_path = csvs[-2], csvs[-1]
     print(f"Secos: {secos_path.name}")
     print(f"RyC:   {ryc_path.name}")
 
