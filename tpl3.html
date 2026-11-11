@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 00:20</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 00:28</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -1562,8 +1562,7 @@ function semCalc(C){
 
   const sku=[];
   for(const g of G.values()){
-    g.reabProp=reabGrp(g,g.doi);
-    g.invAct=invGrp(g,null);g.invProp=invGrp(g,g.doi);
+    g.invAct=invGrp(g,null);g.invProp=0;g.reabProp=0;
     const o=g.occ;
     g.ocupAct=(o&&o.E>0)?o.F/o.E:null;
     g.ocupProy=(o&&o.E>0&&o.F>0&&g.doiAct>0)?Math.min(o.E,o.F*g.doi/g.doiAct)/o.E:null;
@@ -1588,6 +1587,7 @@ function semCalc(C){
       sku.push({s:r.s,name:r.name,grp:g.k,area:g.area,flujo:g.flujo,temp:r.temp,batch:r.batch,
         prom:r.prom,pico:r.pico,minAct:r.min,maxAct:r.max,minP,maxP,doi:g.doi,
         reabAct,reabProp,acc,motivo,dMax:maxP-(r.max||0)});
+      g.reabProp+=reabProp;            // el total del grupo sale de la regla por SKU
     }
   }
   const lista=[...G.values()].sort((a,b)=>(b.reabAct-b.reabProp)-(a.reabAct-a.reabProp));
@@ -1609,18 +1609,15 @@ function renderSem(C){
     ['Reabastos evitados',nf.format(Math.round(ahorro)),actT>0?`${nf1.format(ahorro/actT*100)}% menos`:'—'],
   ].map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
 
-  const invTot=R.G.reduce((a,g)=>a+g.invProp,0),invHoy=R.G.reduce((a,g)=>a+g.invAct,0);
-  if(invTot>invHoy){
-    const peores=R.G.filter(g=>g.invProp>g.invAct).sort((a,b)=>(b.invProp-b.invAct)-(a.invProp-a.invAct)).slice(0,6).map(g=>`${g.k} (${g.invProp})`);
-    W.innerHTML=`<div class="warn" style="border-color:#5a2a2a;background:#2a1818"><b>⚠ La propuesta dejaría ${nf.format(invTot)} SKUs con el Max por debajo del Min</b> (hoy son ${nf.format(invHoy)}). Esos SKUs no tienen ciclo de reabasto, así que no entran en ningún total: el ahorro que se ve abajo los ignora. Antes de cargar nada, hay que revisar el Min de la V L en ${peores.join(', ')}.</div>`;
-    return;
-  }
+  const invHoy=R.G.reduce((a,g)=>a+g.invAct,0);
+  const peores=R.G.filter(g=>g.invAct>0).sort((a,b)=>b.invAct-a.invAct).slice(0,6).map(g=>`${g.k} (${g.invAct})`);
+  const avisoHoy=invHoy?`<div class="warn" style="border-color:#5a2a2a;background:#2a1818"><b>⚠ Hoy hay ${nf.format(invHoy)} SKUs con el Max por debajo del Min en la V L.</b> No tienen ciclo de reabasto, así que no entran en ningún total y la cuenta de arriba los ignora. Están marcados como <b>Corregir</b> en la tabla de abajo. Los grupos con más casos: ${peores.join(', ')}.</div>`:'';
   const faltan=['secos','frio'].filter(p=>R.tot[p]>R.capSem[p]);
   if(!faltan.length){
-    W.innerHTML=`<div class="warn" style="border-color:#24502f;background:#16241b;color:#9fe0a8">✔ Con los días de inventario propuestos, la semana entra en capacidad.</div>`;
+    W.innerHTML=avisoHoy+`<div class="warn" style="border-color:#24502f;background:#16241b;color:#9fe0a8">✔ Con los días de inventario propuestos, la semana entra en capacidad.</div>`;
   }else{
     const topados=R.G.filter(g=>!g.fijo&&g.doiTope!=null&&g.doi>=g.doiTope-1e-9&&faltan.indexOf(g.pool)>=0).map(g=>g.k);
-    W.innerHTML=`<div class="warn"><b>⚠ ${faltan.map(p=>p==='secos'?'Secos':'Frío').join(' y ')} no entra${faltan.length>1?'n':''} en capacidad ni subiendo el Max al máximo permitido.</b> `+
+    W.innerHTML=avisoHoy+`<div class="warn"><b>⚠ ${faltan.map(p=>p==='secos'?'Secos':'Frío').join(' y ')} no entra${faltan.length>1?'n':''} en capacidad ni subiendo el Max al máximo permitido.</b> `+
       (topados.length?`Estos grupos ya llegaron al tope de ${(OCUP_TOPE*100).toFixed(0)}% de ocupación y no pueden crecer más: ${topados.slice(0,12).join(', ')}. `:'')+
       `Las salidas son sumar gente a la ventana de reabasto, liberar espacio en esos grupos, o aceptar los ${nf.format(Math.round(faltan.reduce((a,p)=>a+(R.tot[p]-R.capSem[p]),0)))} reabastos de más.</div>`;
   }
