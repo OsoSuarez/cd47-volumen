@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-10 23:48</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-10 23:55</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -1496,25 +1496,35 @@ function semCalc(C){
 
   // Un reabasto lleva el stock del Min al Max, asi que cubre (max-min) unidades.
   // Reabastos de la semana = demanda de la semana / ese ciclo.
-  const reabSku=(r,doi)=>{
+  // piso=true: no bajar el Max que ya tiene hoy. Solo el frio puede bajarlo,
+  // porque ahi el pedido es explicitamente no crecer.
+  const reabSku=(r,doi,piso)=>{
     const B=r.batch>0?r.batch:NaN;
     let maxP,minP;
-    if(doi!=null&&doi>0&&!isNaN(B)){maxP=Math.max(B,upB(doi*r.prom,B));minP=upB(isNaN(r.min)?0:r.min,B)}
+    if(doi!=null&&doi>0&&!isNaN(B)){
+      maxP=Math.max(B,upB(doi*r.prom,B));
+      if(piso&&r.max>maxP)maxP=r.max;
+      minP=upB(isNaN(r.min)?0:r.min,B);
+    }
     else{maxP=r.max;minP=isNaN(r.min)?0:r.min}
     const ciclo=maxP-minP,dem=r.prom*fSem;
     return {maxP,minP,ciclo,reab:ciclo>0?dem/ciclo:NaN};
   };
-  const reabGrp=(g,doi)=>{let t=0;for(const r of g.items){const x=reabSku(r,doi);if(isFinite(x.reab))t+=x.reab}return t};
+  const reabGrp=(g,doi)=>{let t=0;for(const r of g.items){const x=reabSku(r,doi,!g.frio);if(isFinite(x.reab))t+=x.reab}return t};
 
   for(const g of G.values()){
     g.reabAct=reabGrp(g,null);
     if(g.frio){g.doi=DOI_FRIO[g.k];g.doiTope=DOI_FRIO[g.k];g.fijo=true}
     else{
       const o=g.occ;
-      // Hasta donde puede crecer el stock del grupo sin pasar el tope de ocupacion
-      g.doiTope=(o&&o.E>0&&o.F>0&&g.doiAct>0)?g.doiAct*(OCUP_TOPE*o.E/o.F):null;
       const base=g.doiAct>0?g.doiAct:(doiFor(g.k)||1);   // respaldo: el heredado del area
-      g.doi=g.doiTope!=null?Math.min(base,g.doiTope):base;
+      // Hasta donde puede crecer el stock sin pasar el tope de ocupacion. Un grupo
+      // que ya esta por encima del tope no crece, pero tampoco se lo obliga a bajar:
+      // bajar el Max genera MAS reabastos, que es justo lo que se quiere evitar.
+      let tope=(o&&o.E>0&&o.F>0&&g.doiAct>0)?g.doiAct*(OCUP_TOPE*o.E/o.F):base*1.5;
+      g.doiTope=Math.max(tope,base);
+      g.doi=base;
+      g.sinOcup=!(o&&o.E>0&&o.F>0&&g.doiAct>0);
       g.fijo=false;
     }
     g.doiIni=g.doi;
@@ -1549,7 +1559,7 @@ function semCalc(C){
     g.ocupAct=(o&&o.E>0)?o.F/o.E:null;
     g.ocupProy=(o&&o.E>0&&o.F>0&&g.doiAct>0)?Math.min(o.E,o.F*g.doi/g.doiAct)/o.E:null;
     for(const r of g.items){
-      const a=reabSku(r,null),pr=reabSku(r,g.doi);
+      const a=reabSku(r,null),pr=reabSku(r,g.doi,!g.frio);
       sku.push({s:r.s,name:r.name,grp:g.k,area:g.area,temp:r.temp,batch:r.batch,prom:r.prom,
         minAct:r.min,maxAct:r.max,minP:pr.minP,maxP:pr.maxP,doi:g.doi,
         reabAct:isFinite(a.reab)?a.reab:0,reabProp:isFinite(pr.reab)?pr.reab:0});
@@ -1588,7 +1598,7 @@ function renderSem(C){
   for(const g of R.G){
     const ev=g.reabAct-g.reabProp;
     const tope=!g.fijo&&g.doiTope!=null&&g.doi>=g.doiTope-1e-9;
-    h+=`<tr><td class="l mono">${esc(g.k)}${g.fijo?' <span class="tag" style="background:#1e3a4a;color:#8ec5ff">frío</span>':(tope?' <span class="tag" style="background:#4a3a1e;color:#ffd34d">tope</span>':'')}</td>`+
+    h+=`<tr><td class="l mono">${esc(g.k)}${g.fijo?' <span class="tag" style="background:#1e3a4a;color:#8ec5ff">frío</span>':(tope?' <span class="tag" style="background:#4a3a1e;color:#ffd34d">tope</span>':'')+(g.sinOcup?' <span class="tag" style="background:#3a3a3a;color:#aaa" title="Sin dato de ocupación: el crecimiento se limita a 1,5× el DOI actual">sin ocup.</span>':'')}</td>`+
        `<td class="l">${esc(g.area)}</td><td class="l">${esc(g.flujo)}</td><td class="tc">${g.pool}</td><td>${nf.format(g.skus)}</td>`+
        `<td>${pctTxt(g.ocupAct)}</td><td>${g.doiAct==null?'—':nf1.format(g.doiAct)}</td>`+
        `<td style="color:#ffd34d"><b>${nf1.format(g.doi)}</b></td><td>${pctTxt(g.ocupProy)}</td>`+
