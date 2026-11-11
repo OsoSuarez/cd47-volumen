@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 00:46</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 01:05</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -457,14 +457,14 @@ table.cmp td.hi{color:var(--yellow2)}
   <div class="kpis" id="semKpis"></div>
   <div id="semWarn"></div>
   <div class="panel">
-    <div class="ptitle" style="margin-bottom:12px">Recomendación por grupo · días de inventario a configurar</div>
+    <div class="ptitle" style="margin-bottom:12px">Recomendación por grupo · reparto del espacio de picking</div>
     <div class="note" id="semNote" style="margin-top:0"></div>
     <div class="tbl" style="max-height:560px"><table id="semGrp"></table></div>
   </div>
   <div class="panel">
     <div class="ptitle" style="margin-bottom:12px">Recomendación por SKU · para copiar y subir al sistema madre</div>
     <div class="toolbar" style="margin-bottom:10px">
-      <label title="Cuántos días de demanda debe cubrir el Min. El Min es el punto de disparo del reabasto, no un stock de seguridad: cubre lo que se consume mientras llega la reposición.">Min cubre <input type="number" id="semMinD" value="0.5" min="0" step="0.25" style="width:70px"> días</label>
+      <label title="Cuántos días de demanda debe cubrir el Min. El Min es el punto de disparo del reabasto, no un stock de seguridad: cubre lo que se consume mientras llega la reposición.">Min cubre <input type="number" id="semMinD" value="0.5" min="0" step="0.25" style="width:70px"> días de pico</label>
       <label>Acción <select id="semA"><option value="acc">Sólo las que requieren acción</option><option value="all">Todas</option><option value="Corregir">Corregir</option><option value="Subir">Subir</option><option value="Bajar">Bajar</option><option value="OK">OK</option></select></label>
       <label>Grupo <select id="semF"><option value="all">Todos</option></select></label>
       <label>Área <select id="semAr"><option value="all">Todas</option></select></label>
@@ -1429,7 +1429,7 @@ function simDefaultGrow(){
   let num=0,den=0;pts.forEach(([x,y])=>{num+=(x-mx)*(y-my);den+=(x-mx)**2});
   return den?(Math.exp(num/den)-1)*100:0;
 }
-function simRun(C){
+function simRun(C,ov){
   const D=agg.dates,nD=D.length,raw=new Map();
   for(let i=0;i<agg.M.q.length;i++){const s=agg.M.s[i];let r=raw.get(s);if(!r){r=new Float64Array(nD);raw.set(s,r)}r[agg.M.d[i]]+=agg.M.q[i]}
   const poolOf=t=>t==='Ambiente'?'secos':(t==='Refrigerado'||t==='Congelado')?'frio':t==='Fruver'?(C.fr==='frio'?'frio':'secos'):null;
@@ -1443,7 +1443,7 @@ function simRun(C){
     const d=new Float64Array(nD);for(let j=0;j<nD;j++)d[j]=agg.dT[j].has(temp)?r0[j]:avg;
     const batch=(sk.batch>0)?sk.batch:(info.emp>0?info.emp:NaN);
     const pico=Math.max(...d);
-    const pr=mmProp.get(s)||{};
+    const pr=ov==='vl'?{min:info.min,max:info.max}:(ov?(ov.get(s)||{min:info.min,max:info.max}):(mmProp.get(s)||{}));
     const maxEff=!isNaN(pr.max)&&pr.max>0?pr.max:info.max;
     const minEff=!isNaN(pr.min)?pr.min:(isNaN(info.min)?0:info.min);
     if(!(maxEff>0)){excl++;continue}
@@ -1483,172 +1483,118 @@ function semPool(k,C){
 }
 
 function semCalc(C){
-  const nD=agg.dates.length;
-  const rows=mmCalc();                      // tambien recalcula gAct
-  let fSem=0;for(let j=0;j<nD;j++)fSem+=Math.pow(1+C.g,j);   // crecimiento acumulado
+  const nD=agg.dates.length,rows=mmCalc();
+  let fSem=0;for(let j=0;j<nD;j++)fSem+=Math.pow(1+C.g,j);
+  // volumen por unidad (V L), acotado para que un dato disparatado no domine el grupo
+  const volDe=s=>{const v=(mm.map.get(s)||{}).vol;return v>0?Math.min(Math.max(v,1),1e5):NaN};
 
   const G=new Map();
   for(const r of rows){
     if(!r.hasDem||!(r.prom>0))continue;
     const k=String(r.grp).toUpperCase();
     let g=G.get(k);
-    if(!g){
-      const gi=GROUPS[k]||{},ga=gAct[k],o=OCC[k]||null;
-      g={k,area:gi.area||'SIN ÁREA',flujo:gi.flujo||'—',pool:semPool(k,C),skus:0,demSem:0,items:[],
-         occ:o,doiAct:(ga&&ga.d>0)?ga.st/ga.d:null,frio:DOI_FRIO[k]!=null};
-      G.set(k,g);
-    }
-    g.skus++;g.demSem+=r.prom*fSem;g.items.push(r);
+    if(!g){const gi=GROUPS[k]||{};
+      g={k,area:gi.area||'SIN ÁREA',flujo:gi.flujo||'—',pool:semPool(k,C),skus:0,items:[],occ:OCC[k]||null,frio:DOI_FRIO[k]!=null};
+      G.set(k,g)}
+    g.skus++;g.items.push(r);
   }
 
-  // Un reabasto lleva el stock del Min al Max, asi que cubre (max-min) unidades.
-  // Reabastos de la semana = demanda de la semana / ese ciclo.
-  // piso=true: no bajar el Max que ya tiene hoy. Solo el frio puede bajarlo,
-  // porque ahi el pedido es explicitamente no crecer.
-  const reabSku=(r,doi,piso)=>{
-    const B=r.batch>0?r.batch:NaN;
-    let maxP,minP;
-    if(doi!=null&&doi>0&&!isNaN(B)){
-      maxP=Math.max(B,upB(doi*r.prom,B));
-      if(piso&&r.max>maxP)maxP=r.max;
-      minP=upB(isNaN(r.min)?0:r.min,B);
-    }
-    else{maxP=r.max;minP=isNaN(r.min)?0:r.min}
-    const ciclo=maxP-minP,dem=r.prom*fSem;
-    return {maxP,minP,ciclo,reab:ciclo>0?dem/ciclo:NaN};
-  };
-  // Un SKU con Max <= Min no tiene ciclo: no se puede estimar su reabasto y NO
-  // se cuenta como cero, porque eso disfrazaba de ahorro una configuracion rota.
-  const reabGrp=(g,doi)=>{let t=0;for(const r of g.items){const x=reabSku(r,doi,!g.frio);if(isFinite(x.reab))t+=x.reab}return t};
-  const invGrp=(g,doi)=>{let n=0;for(const r of g.items){const x=reabSku(r,doi,!g.frio);if(!isFinite(x.reab))n++}return n};
-
+  // Reparto del espacio de picking (Bartholdi y Hackman): con el espacio del grupo
+  // fijo, los reabastos totales se minimizan dando a cada SKU un espacio proporcional
+  // a la raiz cuadrada de su flujo en volumen. El espacio del grupo es el que ya
+  // ocupan hoy sus Max; fuera del frio puede crecer hasta el tope de ocupacion.
+  const sku=[],prop=new Map(),tot={secos:0,frio:0},totAct={secos:0,frio:0};
   for(const g of G.values()){
-    g.reabAct=reabGrp(g,null);
-    if(g.frio){g.doi=DOI_FRIO[g.k];g.doiTope=DOI_FRIO[g.k];g.fijo=true}
-    else{
-      const o=g.occ;
-      const base=g.doiAct>0?g.doiAct:(doiFor(g.k)||1);   // respaldo: el heredado del area
-      // Hasta donde puede crecer el stock sin pasar el tope de ocupacion. Un grupo
-      // que ya esta por encima del tope no crece, pero tampoco se lo obliga a bajar:
-      // bajar el Max genera MAS reabastos, que es justo lo que se quiere evitar.
-      let tope=(o&&o.E>0&&o.F>0&&g.doiAct>0)?g.doiAct*(OCUP_TOPE*o.E/o.F):base*1.5;
-      g.doiTope=Math.max(tope,base);
-      g.doi=base;
-      g.sinOcup=!(o&&o.E>0&&o.F>0&&g.doiAct>0);
-      g.fijo=false;
-    }
-    g.doiIni=g.doi;
-  }
-
-  const capSem={secos:C.capS*nD,frio:C.capF*nD};
-  const totales=()=>{const t={secos:0,frio:0};for(const g of G.values())t[g.pool]+=reabGrp(g,g.doi);return t};
-  const totAct=(()=>{const t={secos:0,frio:0};for(const g of G.values())t[g.pool]+=g.reabAct;return t})();
-
-  // Sube de a un paso el grupo que mas reabastos ahorra, hasta entrar en capacidad
-  let n=0;
-  while(n++<5000){
-    const t=totales();
-    const pools=['secos','frio'].filter(x=>t[x]>capSem[x]);
-    if(!pools.length)break;
-    let mejor=null;
-    for(const g of G.values()){
-      if(g.fijo||pools.indexOf(g.pool)<0)continue;
-      if(g.doiTope!=null&&g.doi+PASO_DOI>g.doiTope+1e-9)continue;
-      const ahorro=reabGrp(g,g.doi)-reabGrp(g,g.doi+PASO_DOI);
-      if(ahorro<=1e-9)continue;
-      if(!mejor||ahorro>mejor.a)mejor={g,a:ahorro};
-    }
-    if(!mejor)break;
-    mejor.g.doi+=PASO_DOI;
-  }
-
-  const sku=[];
-  for(const g of G.values()){
-    g.invAct=invGrp(g,null);g.invProp=0;g.reabProp=0;
-    const o=g.occ;
+    const vs=g.items.map(r=>volDe(r.s)).filter(v=>!isNaN(v)).sort((x,y)=>x-y);
+    const vMed=vs.length?vs[vs.length>>1]:1;
+    const o=g.occ,conOcup=!!(o&&o.E>0&&o.F>0);
     g.ocupAct=(o&&o.E>0)?o.F/o.E:null;
-    g.ocupProy=(o&&o.E>0&&o.F>0&&g.doiAct>0)?Math.min(o.E,o.F*g.doi/g.doiAct)/o.E:null;
+    g.sinOcup=!g.frio&&!conOcup;
+    g.kEsp=(!g.frio&&conOcup)?Math.max(1,OCUP_TOPE*o.E/o.F):1;
+    let espHoy=0,espMin=0,espPiso=0,sumRaiz=0;const tmp=[];
     for(const r of g.items){
-      // Regla por SKU: el Max tiene que cubrir el Min mas lo que se consume entre
-      // reabastos. Ese colchon es el pico de un dia, o el DOI del grupo si es mayor.
-      // Asi un SKU necesita como mucho un reabasto por dia y el Max nunca cae
-      // debajo del Min, que es lo que rompia la propuesta por grupo.
-      // El Min es el punto de disparo: cubre lo que se consume hasta que llega la
-      // reposicion, no un stock de seguridad. Se recalcula desde la demanda en vez
-      // de darlo por bueno, porque hoy la mediana cubre 15 dias y hay casos de anios.
-      const B=r.batch>0?r.batch:NaN;
-      const piso=isNaN(B)?1:B;
-      const minP=r.prom>0?Math.max(piso,isNaN(B)?Math.round(C.minD*r.prom):upB(C.minD*r.prom,B))
-                         :(isNaN(B)?(r.min||0):piso);
-      const colchon=Math.max(r.pico||0,g.doi>0?g.doi*r.prom:0,piso);
-      const maxP=isNaN(B)?Math.round(minP+colchon):Math.max(minP+B,upB(minP+colchon,B));
-      const dem=r.prom*fSem;
-      const cicloA=(r.max||0)-(r.min||0);
-      const reabAct=cicloA>0?dem/cicloA:null;          // null = hoy no tiene ciclo valido
-      const reabProp=dem/(maxP-minP);
-      const dMin=minP-(r.min||0),dMax=maxP-(r.max||0);
-      const libera=(r.max||0)-maxP;
-      const diasMin=r.prom>0?(r.min||0)/r.prom:null;
-      let acc,motivo;
-      if(reabAct==null){
-        acc='Corregir';
-        motivo=diasMin!=null&&diasMin>3
-          ? `Max ≤ Min y el Min cubre ${nf1.format(diasMin)} días: el problema es el Min, no el Max`
-          : 'Hoy el Max no supera al Min: configuración imposible';
-      }
-      else if(libera>0&&libera>=(r.max||0)*0.15){acc='Bajar';motivo=`Libera ${f0(libera)} u. de espacio`+(diasMin!=null&&diasMin>3?` · el Min cubre ${nf1.format(diasMin)} días`:'')}
-      else if(dMax>0&&maxP>r.max*1.02){acc='Subir';motivo=`El Max no cubre el pico de ${f0(r.pico)} u./día`}
-      else{acc='OK';motivo='Ya está bien dimensionado'}
-      sku.push({s:r.s,name:r.name,grp:g.k,area:g.area,flujo:g.flujo,temp:r.temp,batch:r.batch,
-        prom:r.prom,pico:r.pico,minAct:r.min,maxAct:r.max,minP,maxP,doi:g.doi,diasMin,
-        reabAct,reabProp,acc,motivo,dMin,dMax,libera});
-      g.reabProp+=reabProp;            // el total del grupo sale de la regla por SKU
+      const B=r.batch>0?r.batch:NaN,piso=isNaN(B)?1:B,v=volDe(r.s)||vMed;
+      // Min = punto de disparo: lo que se consume en C.minD dias de un dia pico
+      const base=C.minD*(r.pico>0?r.pico:r.prom);
+      const minP=Math.max(piso,isNaN(B)?Math.round(base):upB(base,B));
+      const raiz=Math.sqrt(r.prom*v);
+      espHoy+=(r.max>0?r.max:0)*v;espMin+=minP*v;espPiso+=piso*v;sumRaiz+=raiz;
+      tmp.push({r,B,piso,v,minP,raiz});
     }
+    let pres=g.kEsp*espHoy-espMin;                 // espacio disponible para los ciclos
+    g.apretado=pres<espPiso;if(g.apretado)pres=espPiso;
+    g.espHoy=espHoy;g.espProp=0;g.reabAct=0;g.reabProp=0;g.invAct=0;
+    for(const t of tmp){
+      const r=t.r,cu=pres*t.raiz/sumRaiz/t.v;      // ciclo en unidades
+      const ciclo=isNaN(t.B)?Math.max(1,Math.round(cu)):Math.max(t.B,Math.round(cu/t.B)*t.B);
+      const minP=t.minP,maxP=minP+ciclo,dem=r.prom*fSem;
+      const cicloA=(r.max||0)-(r.min||0);
+      const reabAct=cicloA>0?dem/cicloA:null,reabProp=dem/ciclo;
+      const diasMin=(r.min||0)/r.prom,libera=Math.max(0,(r.max||0)-maxP);
+      let acc,motivo;
+      if(reabAct==null){acc='Corregir';motivo=diasMin>3?`Max ≤ Min y el Min cubre ${nf1.format(diasMin)} días de demanda`:'Hoy el Max no supera al Min'}
+      else if(maxP>r.max*1.05){acc='Subir';motivo=`Rota mucho: pasa de ${nf1.format(reabAct)} a ${nf1.format(reabProp)} reabastos por semana`}
+      else if(maxP<r.max*0.85){acc='Bajar';motivo=`Rota poco: cede ${f0(libera)} u. a los SKUs que más rotan`}
+      else{acc='OK';motivo='Ya está bien dimensionado'}
+      g.espProp+=maxP*t.v;g.reabProp+=reabProp;
+      if(reabAct==null)g.invAct++;else g.reabAct+=reabAct;
+      prop.set(r.s,{min:minP,max:maxP});
+      sku.push({s:r.s,name:r.name,grp:g.k,area:g.area,flujo:g.flujo,temp:r.temp,batch:r.batch,
+        prom:r.prom,pico:r.pico,minAct:r.min,maxAct:r.max,minP,maxP,diasMin,
+        reabAct,reabProp,acc,motivo,dMin:minP-(r.min||0),dMax:maxP-(r.max||0),libera});
+    }
+    g.ocupProy=(g.ocupAct!=null&&espHoy>0)?Math.min(1,g.ocupAct*g.espProp/espHoy):null;
+    tot[g.pool]+=g.reabProp;totAct[g.pool]+=g.reabAct;
   }
-  const lista=[...G.values()].sort((a,b)=>(b.reabAct-b.reabProp)-(a.reabAct-a.reabProp));
+  const lista=[...G.values()].sort((x,y)=>(y.reabAct-y.reabProp)-(x.reabAct-x.reabProp));
   const ord={Corregir:0,Subir:1,Bajar:2,OK:3};
   sku.sort((x,y)=>ord[x.acc]-ord[y.acc]||((y.reabAct??0)-y.reabProp)-((x.reabAct??0)-x.reabProp));
-  return {G:lista,sku,capSem,tot:totales(),totAct,nD};
+
+  // Prueba en el simulador diario: la misma cola, con los Min/Max de hoy y con los propuestos
+  const sinCiclo=new Set(sku.filter(x=>x.reabAct==null).map(x=>x.s));
+  const resumen=(S,aparte)=>{let ej=0,ejAparte=0,falt=0;
+    for(const it of S.items){if(aparte&&sinCiclo.has(it.s))ejAparte+=it.trig;else ej+=it.trig;falt+=it.short}
+    const u=S.out[S.out.length-1];
+    return {ej,ejAparte,falt,cola:u.secos.pend+u.frio.pend,
+      dias:S.out.filter(d=>d.secos.req>d.secos.cap||d.frio.req>d.frio.cap).length}};
+  const simHoy=resumen(simRun(C,'vl'),true),simProp=resumen(simRun(C,prop),false);
+  return {G:lista,sku,capSem:{secos:C.capS*nD,frio:C.capF*nD},tot,totAct,nD,simHoy,simProp};
 }
 
 let semR=null;
 function renderSem(C){
-  const KP=$('#semKpis'),W=$('#semWarn'),GR=$('#semGrp'),SK=$('#semSku');
+  const KP=$('#semKpis'),W=$('#semWarn'),GR=$('#semGrp');
   const R=semR=semCalc(C);
-  const actT=R.totAct.secos+R.totAct.frio, propT=R.tot.secos+R.tot.frio, capT=R.capSem.secos+R.capSem.frio;
-  const ahorro=actT-propT;
+  const actT=R.totAct.secos+R.totAct.frio,propT=R.tot.secos+R.tot.frio,capT=R.capSem.secos+R.capSem.frio;
+  const invHoy=R.G.reduce((a,g)=>a+g.invAct,0);
   KP.innerHTML=[
     ['Capacidad de la semana',nf.format(Math.round(capT)),`${nf.format(Math.round(R.capSem.secos))} secos · ${nf.format(Math.round(R.capSem.frio))} frío · ${R.nD} días`],
-    ['Reabastos hoy (V L)',nf.format(Math.round(actT)),actT>capT?`${nf.format(Math.round(actT-capT))} por encima de la capacidad`:'dentro de capacidad'],
-    ['Con la propuesta',nf.format(Math.round(propT)),propT>capT?`todavía ${nf.format(Math.round(propT-capT))} por encima`:'entra en capacidad'],
-    ['Reabastos evitados',nf.format(Math.round(ahorro)),actT>0?`${nf1.format(ahorro/actT*100)}% menos`:'—'],
+    ['Reabastos hoy (V L)',nf.format(Math.round(actT)),`sin contar ${nf.format(invHoy)} SKUs con Max ≤ Min`],
+    ['Con la propuesta',nf.format(Math.round(propT)),propT>capT?`${nf.format(Math.round(propT-capT))} por encima de la capacidad`:'entra en capacidad'],
+    ['Diferencia',(propT<=actT?'−':'+')+nf.format(Math.round(Math.abs(actT-propT))),propT<=actT?'menos reabastos, y cubre también los SKUs sin ciclo':'MÁS reabastos que hoy'],
   ].map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
 
-  const invHoy=R.G.reduce((a,g)=>a+g.invAct,0);
-  const peores=R.G.filter(g=>g.invAct>0).sort((a,b)=>b.invAct-a.invAct).slice(0,6).map(g=>`${g.k} (${g.invAct})`);
-  const avisoHoy=invHoy?`<div class="warn" style="border-color:#5a2a2a;background:#2a1818"><b>⚠ Hoy hay ${nf.format(invHoy)} SKUs con el Max por debajo del Min en la V L.</b> No tienen ciclo de reabasto, así que no entran en ningún total y la cuenta de arriba los ignora. Están marcados como <b>Corregir</b> en la tabla de abajo. Los grupos con más casos: ${peores.join(', ')}.</div>`:'';
-  const faltan=['secos','frio'].filter(p=>R.tot[p]>R.capSem[p]);
-  if(!faltan.length){
-    W.innerHTML=avisoHoy+`<div class="warn" style="border-color:#24502f;background:#16241b;color:#9fe0a8">✔ Con los días de inventario propuestos, la semana entra en capacidad.</div>`;
-  }else{
-    const topados=R.G.filter(g=>!g.fijo&&g.doiTope!=null&&g.doi>=g.doiTope-1e-9&&faltan.indexOf(g.pool)>=0).map(g=>g.k);
-    W.innerHTML=avisoHoy+`<div class="warn"><b>⚠ ${faltan.map(p=>p==='secos'?'Secos':'Frío').join(' y ')} no entra${faltan.length>1?'n':''} en capacidad ni subiendo el Max al máximo permitido.</b> `+
-      (topados.length?`Estos grupos ya llegaron al tope de ${(OCUP_TOPE*100).toFixed(0)}% de ocupación y no pueden crecer más: ${topados.slice(0,12).join(', ')}. `:'')+
-      `Las salidas son sumar gente a la ventana de reabasto, liberar espacio en esos grupos, o aceptar los ${nf.format(Math.round(faltan.reduce((a,p)=>a+(R.tot[p]-R.capSem[p]),0)))} reabastos de más.</div>`;
-  }
-  $('#semNote').textContent=`Frío fijo: congelados 1,5 días (CON, CONMFC, CLP) y refrigerados 2 días (REF, REFMFC, LP, TF, FYV). El resto sube sólo hasta ${(OCUP_TOPE*100).toFixed(0)}% de ocupación proyectada, de a ${String(PASO_DOI).replace('.',',')} días, priorizando el grupo que más reabastos ahorra. Un reabasto cubre Max − Min unidades, así que los reabastos de la semana son la demanda semanal dividida ese ciclo.`;
+  const H=R.simHoy,P=R.simProp;
+  const peor=P.cola>H.cola||P.falt>H.falt*1.05||propT>actT;
+  const fila=(n,x,extra)=>`<tr><td class="l">${n}</td><td>${nf.format(x.ej)}${extra||''}</td><td>${nf.format(x.cola)}</td><td>${x.dias} de ${R.nD}</td><td>${nf.format(Math.round(x.falt))}</td></tr>`;
+  W.innerHTML=
+    (peor?`<div class="warn" style="border-color:#5a2a2a;background:#2a1818"><b>⚠ No cargar esta propuesta.</b> En el simulador diario sale peor que la configuración de hoy${P.cola>H.cola?': deja más cola':''}${P.falt>H.falt*1.05?', más faltante en picking':''}${propT>actT?', y genera más reabastos':''}. Probá con otro valor de “Min cubre”.</div>`
+         :`<div class="warn" style="border-color:#24502f;background:#16241b;color:#9fe0a8">✔ La propuesta pasa la prueba del simulador diario: no deja más cola ni más faltante que la configuración de hoy.</div>`)+
+    (invHoy?`<div class="warn"><b>Hoy hay ${nf.format(invHoy)} SKUs con el Max por debajo del Min en la V L</b>, marcados como Corregir. Su reabasto real de hoy es incierto, por eso en la prueba van aparte.</div>`:'')+
+    `<div class="panel" style="margin-top:12px"><div class="ptitle" style="margin-bottom:10px">Prueba en el simulador diario · misma demanda, misma capacidad</div><div class="tbl"><table><thead><tr><th class="l">Escenario</th><th>Reabastos ejecutados</th><th>Cola al último día</th><th>Días sobre capacidad</th><th>Faltante en picking (u.)</th></tr></thead><tbody>`+
+    fila('Hoy (V L)',H,H.ejAparte?` <span class="cap2">+ ${nf.format(H.ejAparte)} de los SKUs sin ciclo</span>`:'')+fila('Propuesta',P)+`</tbody></table></div></div>`;
 
-  let h='<thead><tr><th class="l">Grupo</th><th class="l">Área</th><th class="l">Flujo</th><th class="l">Pool</th><th>SKUs</th><th>Ocup. actual</th><th>DOI actual</th><th>DOI propuesto</th><th>Ocup. proyectada</th><th>Reab./sem hoy</th><th>Reab./sem propuesto</th><th>Evitados</th><th title="SKUs que quedarían con Max por debajo del Min: no tienen ciclo de reabasto y no se pueden estimar">Sin ciclo</th></tr></thead><tbody>';
+  $('#semNote').textContent=`El espacio de cada grupo se reparte entre sus SKUs en proporción a la raíz cuadrada de su flujo (demanda × volumen), que es el reparto que minimiza reabastos con el espacio fijo. Frío no crece: usa el espacio que ya ocupan sus Max. El resto puede crecer hasta ${(OCUP_TOPE*100).toFixed(0)}% de ocupación. El Min es el punto de disparo: cubre los días de un día pico que indiques abajo.`;
+
+  let h='<thead><tr><th class="l">Grupo</th><th class="l">Área</th><th class="l">Flujo</th><th class="l">Pool</th><th>SKUs</th><th>Ocup. actual</th><th>Espacio permitido</th><th>Ocup. proyectada</th><th>Reab./sem hoy</th><th>Reab./sem propuesto</th><th>Diferencia</th><th title="SKUs que hoy tienen Max ≤ Min">Sin ciclo hoy</th></tr></thead><tbody>';
   for(const g of R.G){
     const ev=g.reabAct-g.reabProp;
-    const tope=!g.fijo&&g.doiTope!=null&&g.doi>=g.doiTope-1e-9;
-    h+=`<tr><td class="l mono">${esc(g.k)}${g.fijo?' <span class="tag" style="background:#1e3a4a;color:#8ec5ff">frío</span>':(tope?' <span class="tag" style="background:#4a3a1e;color:#ffd34d">tope</span>':'')+(g.sinOcup?' <span class="tag" style="background:#3a3a3a;color:#aaa" title="Sin dato de ocupación: el crecimiento se limita a 1,5× el DOI actual">sin ocup.</span>':'')}</td>`+
+    h+=`<tr><td class="l mono">${esc(g.k)}${g.frio?' <span class="tag" style="background:#1e3a4a;color:#8ec5ff">frío</span>':''}${g.sinOcup?' <span class="tag" style="background:#3a3a3a;color:#aaa" title="Sin dato de ocupación: no se le da más espacio">sin ocup.</span>':''}${g.apretado?' <span class="tag" style="background:#4a3a1e;color:#ffd34d" title="El espacio del grupo no alcanza ni para un batch por SKU sobre el Min">apretado</span>':''}</td>`+
        `<td class="l">${esc(g.area)}</td><td class="l">${esc(g.flujo)}</td><td class="tc">${g.pool}</td><td>${nf.format(g.skus)}</td>`+
-       `<td>${pctTxt(g.ocupAct)}</td><td>${g.doiAct==null?'—':nf1.format(g.doiAct)}</td>`+
-       `<td style="color:#ffd34d"><b>${nf1.format(g.doi)}</b></td><td>${pctTxt(g.ocupProy)}</td>`+
+       `<td>${pctTxt(g.ocupAct)}</td><td>${g.kEsp>1.005?'+'+nf1.format((g.kEsp-1)*100)+'%':'igual'}</td><td>${pctTxt(g.ocupProy)}</td>`+
        `<td>${nf.format(Math.round(g.reabAct))}</td><td>${nf.format(Math.round(g.reabProp))}</td>`+
-       `<td style="color:${ev>0.5?'#9fe0a8':'inherit'}">${ev>0.5?'−'+nf.format(Math.round(ev)):'—'}</td>`+
-       `<td style="color:${g.invProp>g.invAct?'#ff9d97':'inherit'}">${g.invProp?nf.format(g.invProp)+(g.invProp>g.invAct?' ⚠':''):'—'}</td></tr>`;
+       `<td style="color:${ev>0.5?'#9fe0a8':(ev<-0.5?'#ff9d97':'inherit')}">${Math.abs(ev)>0.5?(ev>0?'−':'+')+nf.format(Math.round(Math.abs(ev))):'—'}</td>`+
+       `<td>${g.invAct?nf.format(g.invAct):'—'}</td></tr>`;
   }
   GR.innerHTML=h+'</tbody>';
 
@@ -1659,7 +1605,6 @@ function renderSem(C){
   }
   renderSemSku();
 }
-
 function semFiltrado(){
   if(!semR)return [];
   const a=$('#semA').value,f=$('#semF').value,ar=$('#semAr').value,qq=($('#semQ').value||'').trim().toLowerCase();
