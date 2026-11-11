@@ -9,14 +9,15 @@ El servidor corre en http://localhost:9747/ y se apaga solo después de que
 el dashboard descargó los archivos (o tras 5 minutos de inactividad).
 """
 
-import pathlib, sys, threading, time, subprocess, json, urllib.parse
+import pathlib, sys, threading, time, json, urllib.parse
 from datetime import datetime
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 DESCARGAS     = pathlib.Path(__file__).parent.parent / "descargas"
 DASHBOARD_URL = "https://ososuarez.github.io/cd47-volumen/"
 PORT          = 9747
 TIMEOUT_S     = 300   # apagar el servidor tras 5 min si no descargó
+GRACIA_S      = 30    # espera corta a la confirmación del dashboard ya entregados los archivos
 
 def latest(pattern):
     files = sorted(DESCARGAS.glob(pattern), key=lambda f: f.stat().st_mtime, reverse=True)
@@ -47,7 +48,10 @@ def main():
         ]
     }
 
-    downloads_done = threading.Event()
+    downloads_done = threading.Event()   # el dashboard confirmó con /done
+    todo_entregado = threading.Event()   # ya se enviaron todos los archivos
+    entregados     = set()
+    lock           = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
@@ -82,6 +86,10 @@ def main():
                     while chunk := fh.read(1 << 20):
                         self.wfile.write(chunk)
                 print(f"✅  Enviado: {f.name}")
+                with lock:
+                    entregados.add(key)
+                    if entregados >= set(files_map):
+                        todo_entregado.set()
 
             elif path == "/done":
                 self.send_response(200)
@@ -98,32 +106,26 @@ def main():
             self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
             self.end_headers()
 
-    server = HTTPServer(("localhost", PORT), Handler)
+    server = ThreadingHTTPServer(("localhost", PORT), Handler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
     print(f"🌐  Servidor local en http://localhost:{PORT}/  (se apaga solo al terminar)")
 
-    # URL del dashboard con parámetro para disparar la carga automática
-    dashboard = DASHBOARD_URL + f"?autoload={PORT}&ts={urllib.parse.quote(ts_now)}"
-
-    chrome_paths = [
-        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-    ]
-    chrome = next((p for p in chrome_paths if pathlib.Path(p).exists()), None)
-    if chrome:
-        subprocess.Popen([chrome, dashboard])
-    else:
-        import webbrowser
-        webbrowser.open(dashboard)
-
+    print(f"▶️   Abrí el dashboard y hacé clic en 'Cargar últimos planes': {DASHBOARD_URL}")
     print("⏳  Esperando que el dashboard descargue los archivos…")
-    done = downloads_done.wait(timeout=TIMEOUT_S)
+    # El trabajo del servidor termina cuando entregó los archivos. El /done del
+    # dashboard llega recién después de parsear y dibujar, así que se espera un
+    # rato corto por la confirmación y no se trata su ausencia como un error.
+    entregado = todo_entregado.wait(timeout=TIMEOUT_S)
+    confirmado = downloads_done.wait(timeout=GRACIA_S) if entregado else False
     server.shutdown()
-    if done:
+    if confirmado:
         print(f"\n🎉  ¡Listo! Planes cargados en el dashboard. Timestamp: {ts_now}")
+    elif entregado:
+        print(f"\n🎉  Archivos entregados. El dashboard los está procesando. Timestamp: {ts_now}")
     else:
-        print("\n⚠️  Tiempo de espera agotado. Verificá que el dashboard esté abierto.")
+        print("\n⚠️  Tiempo de espera agotado. Verificá que el dashboard esté abierto")
+        print("    y que hayas hecho clic en 'Cargar últimos planes'.")
 
 if __name__ == "__main__":
     main()
