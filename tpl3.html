@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 00:40</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 00:46</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -1705,9 +1705,12 @@ function renderSemSku(){
       `<td>${r.reabAct==null?'<span style="color:#ff9d97">sin ciclo</span>':nf1.format(r.reabAct)}</td><td>${nf1.format(r.reabProp)}</td></tr>`}
   SK.innerHTML=h+'</tbody>';
 }
+// Un nombre de SKU con tabulacion o salto de linea partia la fila al pegarla y
+// corria las columnas. Se limpian los separadores antes de armar el texto.
+const limpio=v=>String(v).replace(/[\t\r\n]+/g,' ').trim();
 function semTexto(cols){
   const L=semFiltrado();
-  return [cols.map(c=>c[0]).join('\t')].concat(L.map(r=>cols.map(c=>c[1](r)).join('\t'))).join('\n');
+  return [cols.map(c=>limpio(c[0])).join('\t')].concat(L.map(r=>cols.map(c=>limpio(c[1](r))).join('\t'))).join('\n');
 }
 
 function renderSim(){
@@ -1756,7 +1759,7 @@ $('#semCsv').onclick=()=>{if(semR)copy(semTexto(SEM_COLS),`${nf.format(semFiltra
 $('#semUp').onclick=()=>{if(!semR)return;const C=SEM_COLS.filter(c=>['SKU ID','Grupo','Min propuesto','Max propuesto'].includes(c[0]));
   copy(semTexto(C),`${nf.format(semFiltrado().length)} SKUs listos para el sistema madre`)};
 $('#semDl').onclick=()=>{if(!semR)return;const L=semFiltrado();
-  const csv='\ufeff'+[SEM_COLS.map(c=>c[0]).join(';')].concat(L.map(r=>SEM_COLS.map(c=>{const v=String(c[1](r));return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}).join(';'))).join('\n');
+  const csv='\ufeff'+[SEM_COLS.map(c=>c[0]).join(';')].concat(L.map(r=>SEM_COLS.map(c=>{const v=limpio(c[1](r));return /[;"]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}).join(';'))).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   a.download=`recomendacion_minmax_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(a.href);
   toast(`${nf.format(L.length)} SKUs descargados`)};
