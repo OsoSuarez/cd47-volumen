@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 05:00</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 05:15</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -1720,6 +1720,24 @@ function semCalc(C){
       const pk=Math.max(...e);diag.push(`m${m}k${k}:${Math.round(pk)}`);
       if(pk<=C.capF*0.95&&(!mejor||stock<mejor.stock))mejor={m,k,stock};
     }
+    // Escenario "pico": la demanda de frio viene en picos (un dia por semana en muchos
+    // SKUs). Min sobre la demanda promedio y un ciclo que cubra el dia pico entero:
+    // cada SKU repone una vez por pico en vez de varias.
+    {
+      const e=new Float64Array(nD);let stockAdd=0;const dias=[],diasHoy=[];
+      for(const t of fr){
+        const piso=t.piso,B=t.B,pk=Math.max(t.r.pico||0,t.r.prom);
+        const minA=Math.max(piso,isNaN(B)?Math.round(C.minD*t.r.prom):upB(C.minD*t.r.prom,B));
+        const cP=isNaN(B)?Math.ceil(pk):upB(pk,B);
+        const c=Math.max(t.maxP-t.minP,cP),mx=minA+c;
+        stockAdd+=(mx-t.maxP)*t.v;
+        if(t.r.prom>0){dias.push(mx/t.r.prom);diasHoy.push(t.maxP/t.r.prom)}
+        for(let j=0;j<nD;j++)e[j]+=t.dd[j]/c;
+      }
+      dias.sort((a,b)=>a-b);diasHoy.sort((a,b)=>a-b);
+      const pk=Math.max(...e);diag.push(`pico:${Math.round(pk)}`);
+      opt.frioPico={entra:pk<=C.capF*0.95,pico:Math.round(pk),diasMed:dias[dias.length>>1],diasHoyMed:diasHoy[diasHoy.length>>1],stockAdd};
+    }
     // diagnostico: cuantos SKUs de frio y cuanto aporta cada tipo en el escenario base
     const e0=new Float64Array(nD),eL=new Float64Array(nD),eNB=new Float64Array(nD);
     for(const t of fr){const c=t.maxP-t.minP;if(!(c>0))continue;for(let j=0;j<nD;j++){e0[j]+=t.dd[j]/c;if(isNaN(t.B))eNB[j]+=t.dd[j]/c;else if(t.r.prom<t.B)eL[j]+=t.dd[j]/c}}
@@ -1833,7 +1851,7 @@ function semDiaHtml(R,C){
     (o.dias===0?` <b>Todos los días entran.</b>`:
       ` No alcanza: en el peor día faltan ${o.deficit.secos?nf.format(o.deficit.secos)+' reabastos de secos':''}${o.deficit.secos&&o.deficit.frio?' y ':''}${o.deficit.frio?nf.format(o.deficit.frio)+' de frío':''}.`+
       (o.motivo==='sin_palancas'?` Ya no quedan palancas: todos los SKUs de esa zona están en su techo (lo que entra en la ubicación, los días de frío que fijaste o el ${(OCUP_TOPE*100).toFixed(0)}% de ocupación del grupo).`:''))+
-    (o.frio?`<br><b>Frío, las dos salidas:</b> (1) sumar capacidad: en promedio ${nf.format(o.frio.extraDia)} reabastos más por día y ${nf.format(o.frio.pico)} en el peor día, unas ${nf1.format(o.frio.horasPico)} horas-persona ese día a ${nf.format(C.prodF||15)} reabastos por hora; o (2) ${o.frio.mejor?`sin sumar gente: ${o.frio.mejor.m>1?`llevar los días de frío a <b>${nf1.format(1.5*o.frio.mejor.m)} en congelados y ${nf1.format(2*o.frio.mejor.m)} en refrigerados</b>`:'mantener los días de frío'}${o.frio.mejor.k>1?` y darle un ciclo de <b>${o.frio.mejor.k} batches</b> (hoy 1) a los ${nf.format(o.frio.lentos)} SKUs que venden menos de un batch por día`:''}. Es una decisión de vencimientos y espacio de frío, no de cálculo`:'ni con 3 veces los días de frío y 4 batches para los lentos alcanza: hace falta capacidad'}.<span class="cap2" style="display:block;opacity:.5">diag ${o.frio.diag}</span>${''}.`:'')+`</div>`;
+    (o.frio?`<br><b>Frío, las dos salidas:</b> (1) sumar capacidad: en promedio ${nf.format(o.frio.extraDia)} reabastos más por día y ${nf.format(o.frio.pico)} en el peor día, unas ${nf1.format(o.frio.horasPico)} horas-persona ese día a ${nf.format(C.prodF||15)} reabastos por hora; o (2) ${o.frio.mejor?`sin sumar gente: ${o.frio.mejor.m>1?`llevar los días de frío a <b>${nf1.format(1.5*o.frio.mejor.m)} en congelados y ${nf1.format(2*o.frio.mejor.m)} en refrigerados</b>`:'mantener los días de frío'}${o.frio.mejor.k>1?` y darle un ciclo de <b>${o.frio.mejor.k} batches</b> (hoy 1) a los ${nf.format(o.frio.lentos)} SKUs que venden menos de un batch por día`:''}. Es una decisión de vencimientos y espacio de frío, no de cálculo`:(o.frioPico&&o.frioPico.entra?`sin sumar gente: como la demanda de frío viene en picos (muchos SKUs se piden un solo día por semana), poner el <b>Min sobre la demanda promedio</b> y un <b>ciclo que cubra el día pico</b>. Cada SKU repone una vez por pico y frío entra (peor día: ${nf.format(o.frioPico.pico)} contra ${nf.format(C.capF)}). Los Max de frío quedarían en una mediana de ${nf1.format(o.frioPico.diasMed)} días de demanda promedio (hoy ${nf1.format(o.frioPico.diasHoyMed)}): es una decisión de vencimientos`:`ni con Min sobre el promedio y ciclo que cubra el pico alcanza (peor día ${nf.format(o.frioPico?o.frioPico.pico:0)} contra ${nf.format(C.capF)}): hace falta capacidad`)}.<span class="cap2" style="display:block;opacity:.5">diag ${o.frio.diag}</span>${''}.`:'')+`</div>`;
   return h;
 }
 
