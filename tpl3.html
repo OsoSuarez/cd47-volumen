@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 00:10</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 00:20</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -462,12 +462,17 @@ table.cmp td.hi{color:var(--yellow2)}
     <div class="tbl" style="max-height:560px"><table id="semGrp"></table></div>
   </div>
   <div class="panel">
-    <div class="ptitle" style="margin-bottom:12px">Min / Máx propuesto por SKU</div>
+    <div class="ptitle" style="margin-bottom:12px">Recomendación por SKU · para copiar y subir al sistema madre</div>
     <div class="toolbar" style="margin-bottom:10px">
+      <label>Acción <select id="semA"><option value="acc">Sólo las que requieren acción</option><option value="all">Todas</option><option value="Corregir">Corregir</option><option value="Subir">Subir</option><option value="Bajar">Bajar</option><option value="OK">OK</option></select></label>
       <label>Grupo <select id="semF"><option value="all">Todos</option></select></label>
+      <label>Área <select id="semAr"><option value="all">Todas</option></select></label>
       <input type="search" id="semQ" placeholder="Buscar SKU o nombre..">
       <span class="spacer"></span>
-      <button class="btn" id="semCsv">Copiar para UPLOAD MASIVO</button>
+      <span class="cap2" id="semCount"></span>
+      <button class="btn" id="semCsv">Copiar tabla</button>
+      <button class="btn y" id="semUp">Copiar Min/Max</button>
+      <button class="btn" id="semDl">Descargar CSV</button>
     </div>
     <div class="tbl" style="max-height:560px"><table id="semSku"></table></div>
   </div>
@@ -1466,7 +1471,7 @@ function simRun(C){
 // Dias de inventario fijos para la cadena de frio: manda el espacio refrigerado,
 // no la optimizacion de reabastos. Estos grupos no suben aunque convenga.
 const DOI_FRIO={CON:1.5,CONMFC:1.5,CLP:1.5,REF:2,REFMFC:2,LP:2,TF:2,FYV:2};
-const OCUP_TOPE=0.85;   // hasta donde se puede llenar un grupo al subir el Max
+const OCUP_TOPE=0.90;   // hasta donde se puede llenar un grupo al subir el Max
 const PASO_DOI=0.25;    // granularidad de la recomendacion, en dias
 
 function semPool(k,C){
@@ -1563,14 +1568,31 @@ function semCalc(C){
     g.ocupAct=(o&&o.E>0)?o.F/o.E:null;
     g.ocupProy=(o&&o.E>0&&o.F>0&&g.doiAct>0)?Math.min(o.E,o.F*g.doi/g.doiAct)/o.E:null;
     for(const r of g.items){
-      const a=reabSku(r,null),pr=reabSku(r,g.doi,!g.frio);
-      sku.push({s:r.s,name:r.name,grp:g.k,area:g.area,temp:r.temp,batch:r.batch,prom:r.prom,
-        minAct:r.min,maxAct:r.max,minP:pr.minP,maxP:pr.maxP,doi:g.doi,
-        reabAct:isFinite(a.reab)?a.reab:0,reabProp:isFinite(pr.reab)?pr.reab:0});
+      // Regla por SKU: el Max tiene que cubrir el Min mas lo que se consume entre
+      // reabastos. Ese colchon es el pico de un dia, o el DOI del grupo si es mayor.
+      // Asi un SKU necesita como mucho un reabasto por dia y el Max nunca cae
+      // debajo del Min, que es lo que rompia la propuesta por grupo.
+      const B=r.batch>0?r.batch:NaN;
+      const minP=isNaN(B)?(r.min||0):upB(r.min||0,B);
+      const colchon=Math.max(r.pico||0,g.doi>0?g.doi*r.prom:0,isNaN(B)?1:B);
+      const maxP=isNaN(B)?Math.round(minP+colchon):Math.max(minP+B,upB(minP+colchon,B));
+      const dem=r.prom*fSem;
+      const cicloA=(r.max||0)-(r.min||0);
+      const reabAct=cicloA>0?dem/cicloA:null;          // null = hoy no tiene ciclo valido
+      const reabProp=dem/(maxP-minP);
+      let acc,motivo;
+      if(reabAct==null){acc='Corregir';motivo='Hoy el Max no supera al Min: configuración imposible'}
+      else if(maxP>r.max*1.02){acc='Subir';motivo=`El Max no cubre el pico de ${f0(r.pico)} u./día`}
+      else if(r.max>maxP*1.3){acc='Bajar';motivo=`Sobra Max: con ${f0(maxP)} alcanza y libera ${f0(r.max-maxP)} u. de espacio`}
+      else{acc='OK';motivo='El Max ya está bien dimensionado'}
+      sku.push({s:r.s,name:r.name,grp:g.k,area:g.area,flujo:g.flujo,temp:r.temp,batch:r.batch,
+        prom:r.prom,pico:r.pico,minAct:r.min,maxAct:r.max,minP,maxP,doi:g.doi,
+        reabAct,reabProp,acc,motivo,dMax:maxP-(r.max||0)});
     }
   }
   const lista=[...G.values()].sort((a,b)=>(b.reabAct-b.reabProp)-(a.reabAct-a.reabProp));
-  sku.sort((x,y)=>(y.reabAct-y.reabProp)-(x.reabAct-x.reabProp)||y.reabAct-x.reabAct);
+  const ord={Corregir:0,Subir:1,Bajar:2,OK:3};
+  sku.sort((x,y)=>ord[x.acc]-ord[y.acc]||((y.reabAct??0)-y.reabProp)-((x.reabAct??0)-x.reabProp));
   return {G:lista,sku,capSem,tot:totales(),totAct,nD};
 }
 
@@ -1626,16 +1648,49 @@ function renderSem(C){
   renderSemSku();
 }
 
+function semFiltrado(){
+  if(!semR)return [];
+  const a=$('#semA').value,f=$('#semF').value,ar=$('#semAr').value,qq=($('#semQ').value||'').trim().toLowerCase();
+  return semR.sku.filter(r=>
+    (a==='all'||(a==='acc'?r.acc!=='OK':r.acc===a))&&
+    (f==='all'||r.grp===f)&&(ar==='all'||r.area===ar)&&
+    (!qq||String(r.s).includes(qq)||r.name.toLowerCase().includes(qq)));
+}
+const SEM_COLS=[
+  ['SKU ID',r=>r.s],['SKU Name',r=>r.name],['Grupo',r=>r.grp],['Área',r=>r.area],['Flujo',r=>r.flujo],['Temp.',r=>r.temp],
+  ['Acción',r=>r.acc],['Motivo',r=>r.motivo],['Batch',r=>Math.round(r.batch||0)],
+  ['Demanda prom./día',r=>Math.round(r.prom)],['Pico diario',r=>Math.round(r.pico)],
+  ['Min actual',r=>Math.round(r.minAct||0)],['Max actual',r=>Math.round(r.maxAct||0)],
+  ['Min propuesto',r=>Math.round(r.minP)],['Max propuesto',r=>Math.round(r.maxP)],
+  ['Dif. Max',r=>Math.round(r.dMax)],
+  ['Reab./sem hoy',r=>r.reabAct==null?'':r.reabAct.toFixed(1).replace('.',',')],
+  ['Reab./sem propuesto',r=>r.reabProp.toFixed(1).replace('.',',')],
+];
 function renderSemSku(){
   const SK=$('#semSku');if(!semR)return;
-  const f=$('#semF').value,qq=($('#semQ').value||'').trim().toLowerCase();
-  const list=semR.sku.filter(r=>(f==='all'||r.grp===f)&&(!qq||String(r.s).includes(qq)||r.name.toLowerCase().includes(qq)));
-  const lim=Math.min(list.length,500);
-  let h='<thead><tr><th class="l">SKU ID</th><th class="l">SKU Name</th><th class="l">Grupo</th><th class="l">Temp.</th><th>Batch</th><th>Demanda prom./día</th><th>DOI propuesto</th><th>Min actual</th><th>Max actual</th><th>Min propuesto</th><th>Max propuesto</th><th>Reab./sem hoy</th><th>Reab./sem propuesto</th></tr></thead><tbody>';
-  for(let i=0;i<lim;i++){const r=list[i];const sube=r.maxP>r.maxAct,baja=r.maxP<r.maxAct;
-    h+=`<tr><td class="l mono">${r.s}</td><td class="l nm" title="${esc(r.name)}">${esc(r.name)}</td><td class="tc">${esc(r.grp)}</td><td class="tc">${esc(r.temp)}</td><td>${f0(r.batch)}</td><td>${nf1.format(r.prom)}</td><td>${nf1.format(r.doi)}</td><td>${f0(r.minAct)}</td><td>${f0(r.maxAct)}</td><td>${f0(r.minP)}</td><td style="color:${sube?'#ffd34d':(baja?'#8ec5ff':'inherit')}"><b>${f0(r.maxP)}</b></td><td>${nf1.format(r.reabAct)}</td><td>${nf1.format(r.reabProp)}</td></tr>`}
+  const sel=$('#semAr');
+  if(sel&&sel.options.length<=1){const as=[...new Set(semR.sku.map(r=>r.area))].sort();
+    sel.innerHTML='<option value="all">Todas</option>'+as.map(x=>`<option value="${x}">${x}</option>`).join('')}
+  const L=semFiltrado(),lim=Math.min(L.length,600);
+  const n={Corregir:0,Subir:0,Bajar:0,OK:0};for(const r of semR.sku)n[r.acc]++;
+  $('#semCount').innerHTML=`${nf.format(L.length)} SKUs · <span style="color:#ff9d97">${nf.format(n.Corregir)} corregir</span> · <span style="color:#ffd34d">${nf.format(n.Subir)} subir</span> · <span style="color:#8ec5ff">${nf.format(n.Bajar)} bajar</span> · ${nf.format(n.OK)} ok`;
+  const col={Corregir:'#ff9d97',Subir:'#ffd34d',Bajar:'#8ec5ff',OK:'#9fe0a8'};
+  let h='<thead><tr>'+SEM_COLS.map(c=>`<th class="${['SKU Name','Motivo'].includes(c[0])?'l':''}">${c[0]}</th>`).join('')+'</tr></thead><tbody>';
+  for(let i=0;i<lim;i++){const r=L[i];
+    h+='<tr>'+
+      `<td class="l mono">${r.s}</td><td class="l nm" title="${esc(r.name)}">${esc(r.name)}</td>`+
+      `<td class="tc">${esc(r.grp)}</td><td class="l">${esc(r.area)}</td><td class="l">${esc(r.flujo)}</td><td class="tc">${esc(r.temp)}</td>`+
+      `<td class="l" style="color:${col[r.acc]}"><b>${r.acc}</b></td><td class="l nm" title="${esc(r.motivo)}">${esc(r.motivo)}</td>`+
+      `<td>${f0(r.batch)}</td><td>${nf1.format(r.prom)}</td><td>${f0(r.pico)}</td>`+
+      `<td>${f0(r.minAct)}</td><td>${f0(r.maxAct)}</td>`+
+      `<td>${f0(r.minP)}</td><td style="color:${col[r.acc]}"><b>${f0(r.maxP)}</b></td>`+
+      `<td style="color:${r.dMax>0?'#ffd34d':(r.dMax<0?'#8ec5ff':'inherit')}">${r.dMax>0?'+':''}${f0(r.dMax)}</td>`+
+      `<td>${r.reabAct==null?'<span style="color:#ff9d97">sin ciclo</span>':nf1.format(r.reabAct)}</td><td>${nf1.format(r.reabProp)}</td></tr>`}
   SK.innerHTML=h+'</tbody>';
-  if(list.length>lim)$('#semNote').textContent=$('#semNote').textContent.replace(/ Mostrando.*$/,'')+` Mostrando ${lim} de ${nf.format(list.length)} SKUs.`;
+}
+function semTexto(cols){
+  const L=semFiltrado();
+  return [cols.map(c=>c[0]).join('\t')].concat(L.map(r=>cols.map(c=>c[1](r)).join('\t'))).join('\n');
 }
 
 function renderSim(){
@@ -1677,12 +1732,16 @@ function renderSim(){
   TP.innerHTML=th+'</tbody>';
   try{renderSem(C)}catch(e){console.error('renderSem',e);$('#semWarn').innerHTML='<div class="warn">No se pudo calcular el reabasto semanal: '+esc(e.message)+'</div>'}
 }
-$('#semF').onchange=()=>renderSemSku();
+$('#semF').onchange=$('#semA').onchange=$('#semAr').onchange=()=>renderSemSku();
 $('#semQ').oninput=()=>renderSemSku();
-$('#semCsv').onclick=()=>{if(!semR)return;const f=$('#semF').value,qq=($('#semQ').value||'').trim().toLowerCase();
-  const L=semR.sku.filter(r=>(f==='all'||r.grp===f)&&(!qq||String(r.s).includes(qq)||r.name.toLowerCase().includes(qq)));
-  const t=['SKU ID\tGrupo\tMin propuesto\tMax propuesto'].concat(L.map(r=>[r.s,r.grp,Math.round(r.minP),Math.round(r.maxP)].join('\t'))).join('\n');
-  copy(t,`${nf.format(L.length)} SKUs copiados`)};
+$('#semCsv').onclick=()=>{if(semR)copy(semTexto(SEM_COLS),`${nf.format(semFiltrado().length)} SKUs copiados con todo el detalle`)};
+$('#semUp').onclick=()=>{if(!semR)return;const C=SEM_COLS.filter(c=>['SKU ID','Grupo','Min propuesto','Max propuesto'].includes(c[0]));
+  copy(semTexto(C),`${nf.format(semFiltrado().length)} SKUs listos para el sistema madre`)};
+$('#semDl').onclick=()=>{if(!semR)return;const L=semFiltrado();
+  const csv='\ufeff'+[SEM_COLS.map(c=>c[0]).join(';')].concat(L.map(r=>SEM_COLS.map(c=>{const v=String(c[1](r));return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}).join(';'))).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`recomendacion_minmax_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(a.href);
+  toast(`${nf.format(L.length)} SKUs descargados`)};
 $('#sPerS').oninput=$('#sProdS').oninput=$('#sHrS').oninput=$('#sPerF').oninput=$('#sProdF').oninput=$('#sHrF').oninput=$('#sGrow').oninput=()=>renderSim();
 $('#sFruver').onchange=()=>renderSim();
 renderPolicy();
