@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 04:20</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 04:35</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -1700,16 +1700,20 @@ function semCalc(C){
     const fr=T.filter(t=>t.pool==='frio');
     const semanaReq=SP.out.reduce((a,d)=>a+d.frio.req,0),semanaCap=C.capF*nD;
     const extraDia=Math.max(0,Math.ceil((semanaReq-semanaCap)/nD));
-    let mult=null;
-    for(const m of [1.25,1.5,1.75,2,2.5,3,4]){
+    // En frio el limite real es el batch: la mayoria vende menos de un batch por dia y
+    // ya tiene un ciclo de un solo batch, que de por si supera los dias fijados. La
+    // salida sin sumar gente es darle a esos SKUs lentos un ciclo de mas batches.
+    const lentos=fr.filter(t=>!isNaN(t.B)&&t.r.prom<t.B);
+    let nb=null,diasMed=null;
+    for(const k of [2,3,4,6]){
       const e=new Float64Array(nD);
-      for(const t of fr){const df=(DOI_FRIO[t.g.k]||2)*m;
-        const tope=isNaN(t.B)?Math.floor(df*t.r.prom):floorB(df*t.r.prom,t.B);
-        const c=Math.max(t.maxP,tope)-t.minP;if(!(c>0))continue;
+      for(const t of fr){let c=t.maxP-t.minP;if(!isNaN(t.B)&&t.r.prom<t.B)c=Math.max(c,k*t.B);if(!(c>0))continue;
         for(let j=0;j<nD;j++)e[j]+=t.dd[j]/c}
-      if(Math.max(...e)<=C.capF*0.9){mult=m;break}
+      if(Math.max(...e)<=C.capF*0.92){nb=k;
+        const dd=lentos.map(t=>(t.minP+Math.max(t.maxP-t.minP,k*t.B))/Math.max(t.r.prom,1e-6)).sort((a,b)=>a-b);
+        diasMed=dd.length?dd[dd.length>>1]:null;break}
     }
-    opt.frio={pico:opt.deficit.frio,extraDia,horasPico:opt.deficit.frio/Math.max(1,C.prodF||15),mult};
+    opt.frio={pico:opt.deficit.frio,extraDia,horasPico:opt.deficit.frio/Math.max(1,C.prodF||15),nb,lentos:lentos.length,diasMed};
   }
 
   // ---------- Clasificacion y salida ----------
@@ -1818,7 +1822,7 @@ function semDiaHtml(R,C){
     (o.dias===0?` <b>Todos los días entran.</b>`:
       ` No alcanza: en el peor día faltan ${o.deficit.secos?nf.format(o.deficit.secos)+' reabastos de secos':''}${o.deficit.secos&&o.deficit.frio?' y ':''}${o.deficit.frio?nf.format(o.deficit.frio)+' de frío':''}.`+
       (o.motivo==='sin_palancas'?` Ya no quedan palancas: todos los SKUs de esa zona están en su techo (lo que entra en la ubicación, los días de frío que fijaste o el ${(OCUP_TOPE*100).toFixed(0)}% de ocupación del grupo).`:''))+
-    (o.frio?`<br><b>Frío, las dos salidas:</b> (1) sumar capacidad: en promedio ${nf.format(o.frio.extraDia)} reabastos más por día y ${nf.format(o.frio.pico)} en el peor día, unas ${nf1.format(o.frio.horasPico)} horas-persona ese día a ${nf.format(C.prodF||15)} reabastos por hora; o (2) ${o.frio.mult?`permitir <b>${nf1.format(o.frio.mult)} veces</b> los días de frío fijados (congelados ${nf1.format(1.5*o.frio.mult)} días, refrigerados ${nf1.format(2*o.frio.mult)} días) para entrar sin sumar gente`:'ni con 4 veces los días de frío alcanza: hace falta capacidad'}.`:'')+`</div>`;
+    (o.frio?`<br><b>Frío, las dos salidas:</b> (1) sumar capacidad: en promedio ${nf.format(o.frio.extraDia)} reabastos más por día y ${nf.format(o.frio.pico)} en el peor día, unas ${nf1.format(o.frio.horasPico)} horas-persona ese día a ${nf.format(C.prodF||15)} reabastos por hora; o (2) ${o.frio.nb?`darle un ciclo de <b>${o.frio.nb} batches</b> (hoy 1) a los ${nf.format(o.frio.lentos)} SKUs de frío que venden menos de un batch por día; así entra sin sumar gente, pero esos SKUs quedarían con una mediana de ${nf1.format(o.frio.diasMed)} días de stock, por encima de los 1,5 y 2 días fijados. Es una decisión de vencimientos: frío lo limita el batch, no los días`:'ni dando 6 batches de ciclo a los SKUs lentos alcanza: hace falta capacidad'}.`:'')+`</div>`;
   return h;
 }
 
@@ -1893,7 +1897,7 @@ function semFiltrado(){
 const SEM_COLS=[
   ['SKU ID',r=>r.s],['SKU Name',r=>r.name],['Grupo',r=>r.grp],['Área',r=>r.area],['Flujo',r=>r.flujo],['Temp.',r=>r.temp],
   ['Acción',r=>r.acc],['Motivo',r=>r.motivo],['Batch',r=>Math.round(r.batch||0)],
-  ['Demanda prom./día',r=>Math.round(r.prom)],['Pico diario',r=>Math.round(r.pico)],
+  ['Demanda prom./día',r=>r.prom.toFixed(1).replace('.',',')],['Pico diario',r=>Math.round(r.pico)],
   ['Días que cubre el Min hoy',r=>r.diasMin==null?'':r.diasMin.toFixed(1).replace('.',',')],
   ['Min actual',r=>Math.round(r.minAct||0)],['Max actual',r=>Math.round(r.maxAct||0)],
   ['Max físico (ubicación)',r=>r.maxFis==null?'':Math.round(r.maxFis)],
