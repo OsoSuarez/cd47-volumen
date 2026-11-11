@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 01:05</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 01:20</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -465,6 +465,7 @@ table.cmp td.hi{color:var(--yellow2)}
     <div class="ptitle" style="margin-bottom:12px">Recomendación por SKU · para copiar y subir al sistema madre</div>
     <div class="toolbar" style="margin-bottom:10px">
       <label title="Cuántos días de demanda debe cubrir el Min. El Min es el punto de disparo del reabasto, no un stock de seguridad: cubre lo que se consume mientras llega la reposición.">Min cubre <input type="number" id="semMinD" value="0.5" min="0" step="0.25" style="width:70px"> días de pico</label>
+      <label title="Tope del ciclo por SKU, en días de demanda promedio. En frío el tope es 5 días.">Ciclo hasta <input type="number" id="semMaxD" value="14" min="1" step="1" style="width:70px"> días</label>
       <label>Acción <select id="semA"><option value="acc">Sólo las que requieren acción</option><option value="all">Todas</option><option value="Corregir">Corregir</option><option value="Subir">Subir</option><option value="Bajar">Bajar</option><option value="OK">OK</option></select></label>
       <label>Grupo <select id="semF"><option value="all">Todos</option></select></label>
       <label>Área <select id="semAr"><option value="all">Todas</option></select></label>
@@ -1418,7 +1419,7 @@ function simCfg(){
   const capS=Math.floor(v('#sPerS')*v('#sProdS')*v('#sHrS')),capF=Math.floor(v('#sPerF')*v('#sProdF')*v('#sHrF'));
   $('#sCapS').textContent=nf.format(capS);$('#sCapF').textContent=nf.format(capF);$('#sCapT').textContent=nf.format(capS+capF);
   const md=$('#semMinD');
-  return {capS,capF,fr:$('#sFruver').value,g:v('#sGrow')/100,minD:md?(parseFloat(md.value)||0):0.5};
+  return {capS,capF,fr:$('#sFruver').value,g:v('#sGrow')/100,minD:md?(parseFloat(md.value)||0):0.5,maxD:$('#semMaxD')?(parseFloat($('#semMaxD').value)||14):14};
 }
 function simDefaultGrow(){
   if(!agg||!agg.dates.length)return 0;
@@ -1447,7 +1448,11 @@ function simRun(C,ov){
     const maxEff=!isNaN(pr.max)&&pr.max>0?pr.max:info.max;
     const minEff=!isNaN(pr.min)?pr.min:(isNaN(info.min)?0:info.min);
     if(!(maxEff>0)){excl++;continue}
-    items.push({s,name:sk.name||info.name||'',grp:info.grp,pool,temp,d,min:minEff,max:info.max,batch,pico,maxSug:maxEff,maxEff,S:maxEff,trig:0,short:0});
+    // Al comparar escenarios el stock inicial se reparte dentro del ciclo (fase fija
+    // por SKU): arrancar todo en Max favorece a quien tiene ciclos largos.
+    const u=ov?(((s*2654435761)>>>0)/4294967296):1;
+    const S0=maxEff>minEff?minEff+(maxEff-minEff)*u:maxEff;
+    items.push({s,name:sk.name||info.name||'',grp:info.grp,pool,temp,d,min:minEff,max:info.max,batch,pico,maxSug:maxEff,maxEff,S:S0,trig:0,short:0});
   }
   const cap={secos:C.capS,frio:C.capF},q={secos:[],frio:[]},inQ=new Set(),out=[],dayTot=new Float64Array(nD);
   for(let j=0;j<nD;j++){
@@ -1474,7 +1479,8 @@ function simRun(C,ov){
 // no la optimizacion de reabastos. Estos grupos no suben aunque convenga.
 const DOI_FRIO={CON:1.5,CONMFC:1.5,CLP:1.5,REF:2,REFMFC:2,LP:2,TF:2,FYV:2};
 const OCUP_TOPE=0.90;   // hasta donde se puede llenar un grupo al subir el Max
-const PASO_DOI=0.25;    // granularidad de la recomendacion, en dias
+const PASO_DOI=0.25;
+const CICLO_MAX_FRIO=5;  // dias de ciclo como mucho en frio, por vencimiento    // granularidad de la recomendacion, en dias
 
 function semPool(k,C){
   if(k==='FYV')return C.fr==='frio'?'frio':'secos';
@@ -1524,8 +1530,22 @@ function semCalc(C){
     let pres=g.kEsp*espHoy-espMin;                 // espacio disponible para los ciclos
     g.apretado=pres<espPiso;if(g.apretado)pres=espPiso;
     g.espHoy=espHoy;g.espProp=0;g.reabAct=0;g.reabProp=0;g.invAct=0;
+    // Ningun SKU recibe mas de capD dias de demanda de ciclo: mas que eso es stock
+    // parado en picking. Lo que sobra de los topados se reparte entre el resto, y
+    // si todos llegan al tope el espacio restante queda libre.
+    const capD=g.frio?Math.min(C.maxD,CICLO_MAX_FRIO):C.maxD;
+    for(const t of tmp){t.capV=Math.max(t.piso,capD*t.r.prom)*t.v;t.cv=null}
+    let libre=pres,act=tmp.slice();
+    for(let it=0;it<60&&act.length;it++){
+      const sr=act.reduce((a,t)=>a+t.raiz,0);if(!(sr>0))break;
+      const pasan=act.filter(t=>libre*t.raiz/sr>t.capV);
+      if(!pasan.length){for(const t of act)t.cv=libre*t.raiz/sr;act=[];break}
+      for(const t of pasan){t.cv=t.capV;libre-=t.capV}
+      act=act.filter(t=>t.cv==null);
+    }
+    for(const t of act)t.cv=t.piso*t.v;
     for(const t of tmp){
-      const r=t.r,cu=pres*t.raiz/sumRaiz/t.v;      // ciclo en unidades
+      const r=t.r,cu=t.cv/t.v;                     // ciclo en unidades
       const ciclo=isNaN(t.B)?Math.max(1,Math.round(cu)):Math.max(t.B,Math.round(cu/t.B)*t.B);
       const minP=t.minP,maxP=minP+ciclo,dem=r.prom*fSem;
       const cicloA=(r.max||0)-(r.min||0);
@@ -1584,7 +1604,7 @@ function renderSem(C){
     `<div class="panel" style="margin-top:12px"><div class="ptitle" style="margin-bottom:10px">Prueba en el simulador diario · misma demanda, misma capacidad</div><div class="tbl"><table><thead><tr><th class="l">Escenario</th><th>Reabastos ejecutados</th><th>Cola al último día</th><th>Días sobre capacidad</th><th>Faltante en picking (u.)</th></tr></thead><tbody>`+
     fila('Hoy (V L)',H,H.ejAparte?` <span class="cap2">+ ${nf.format(H.ejAparte)} de los SKUs sin ciclo</span>`:'')+fila('Propuesta',P)+`</tbody></table></div></div>`;
 
-  $('#semNote').textContent=`El espacio de cada grupo se reparte entre sus SKUs en proporción a la raíz cuadrada de su flujo (demanda × volumen), que es el reparto que minimiza reabastos con el espacio fijo. Frío no crece: usa el espacio que ya ocupan sus Max. El resto puede crecer hasta ${(OCUP_TOPE*100).toFixed(0)}% de ocupación. El Min es el punto de disparo: cubre los días de un día pico que indiques abajo.`;
+  $('#semNote').textContent=`El espacio de cada grupo se reparte entre sus SKUs en proporción a la raíz cuadrada de su flujo (demanda × volumen), que es el reparto que minimiza reabastos con el espacio fijo. Frío no crece: usa el espacio que ya ocupan sus Max. El resto puede crecer hasta ${(OCUP_TOPE*100).toFixed(0)}% de ocupación. Ningún SKU recibe más ciclo que el tope de días (${CICLO_MAX_FRIO} en frío). El Min es el punto de disparo: cubre los días de un día pico que indiques abajo.`;
 
   let h='<thead><tr><th class="l">Grupo</th><th class="l">Área</th><th class="l">Flujo</th><th class="l">Pool</th><th>SKUs</th><th>Ocup. actual</th><th>Espacio permitido</th><th>Ocup. proyectada</th><th>Reab./sem hoy</th><th>Reab./sem propuesto</th><th>Diferencia</th><th title="SKUs que hoy tienen Max ≤ Min">Sin ciclo hoy</th></tr></thead><tbody>';
   for(const g of R.G){
@@ -1698,7 +1718,7 @@ function renderSim(){
   try{renderSem(C)}catch(e){console.error('renderSem',e);$('#semWarn').innerHTML='<div class="warn">No se pudo calcular el reabasto semanal: '+esc(e.message)+'</div>'}
 }
 $('#semF').onchange=$('#semA').onchange=$('#semAr').onchange=()=>renderSemSku();
-$('#semMinD').oninput=()=>renderSim();
+$('#semMinD').oninput=$('#semMaxD').oninput=()=>renderSim();
 $('#semQ').oninput=()=>renderSemSku();
 $('#semCsv').onclick=()=>{if(semR)copy(semTexto(SEM_COLS),`${nf.format(semFiltrado().length)} SKUs copiados con todo el detalle`)};
 $('#semUp').onclick=()=>{if(!semR)return;const C=SEM_COLS.filter(c=>['SKU ID','Grupo','Min propuesto','Max propuesto'].includes(c[0]));
