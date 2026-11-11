@@ -65,6 +65,27 @@ for r in rows:
     if not is_yes(get(r, isel)):
         E[pool(tp)] += 1
 
+# 1b) Diagnostico de volumetria de ubicaciones (solo imprime, no cambia nada)
+try:
+    from collections import Counter
+    icc, ipm, ioc, itip, icant = col(H, 'Capacidad Cubica'), col(H, 'Peso Max'), col(H, 'Ocupacion'), col(H, 'Tipo'), col(H, 'CANT SKUS')
+    cc_all, cc_pick, cc_tp, tipos = Counter(), Counter(), defaultdict(Counter), Counter()
+    for r in rows:
+        v = get(r, icc)
+        cc_all[v] += 1
+        tipos[get(r, itip)] += 1
+        if is_one(get(r, ip)) and get(r, iu) in picks:
+            cc_pick[v] += 1
+            cc_tp[get(r, itp).upper()][v] += 1
+    print('DIAG Capacidad Cubica (todas):', cc_all.most_common(12))
+    print('DIAG Capacidad Cubica (picking):', cc_pick.most_common(12))
+    print('DIAG Tipo:', tipos.most_common(8))
+    print('DIAG Peso Max:', Counter(get(r, ipm) for r in rows).most_common(8))
+    for tp, c in sorted(cc_tp.items(), key=lambda x: -sum(x[1].values()))[:40]:
+        print('DIAG CC por grupo', tp, sum(c.values()), c.most_common(4))
+except Exception as e:
+    print('DIAG error', e)
+
 # 2) Inventario: stock picking por SKU y posiciones ocupadas (F) por pool
 H, rows = read_csv(os.path.join(DATOS, 'REFERENCIA.csv'))
 ie, isa, iu = col(H, 'EAN'), col(H, 'Saldo'), col(H, 'Ubicacion')
