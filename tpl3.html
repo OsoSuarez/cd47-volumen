@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-10 23:40</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-10 23:48</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -564,6 +564,56 @@ try{
     files.push({id:++fileSeq,name:F.file,status:'ok',pre:true,recs,rows:F.rows,whs:new Set(F.whs),dates:new Set(F.dates),skuSet:new Set(F.skus),temps:new Set(F.skus.map(s=>skus.get(s).temp))});}
 }catch(e){console.warn(e)}
 
+// ---------- última carga guardada en este navegador ----------
+// Lo que el usuario sube a mano queda parseado en el mismo formato compacto que
+// base.json (~1,4 MB los dos planes), asi que se guarda en IndexedDB y vuelve
+// solo al refrescar. Es por navegador: el base.json del bot sigue siendo el que
+// ve todo el equipo, y si es mas nuevo que lo guardado, gana el del bot.
+const SNAP_DB='cd47',SNAP_ST='snap',SNAP_K='ultima_carga';
+function snapDB(){return new Promise((res,rej)=>{const r=indexedDB.open(SNAP_DB,1);
+  r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(SNAP_ST))r.result.createObjectStore(SNAP_ST)};
+  r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+function snapTx(modo,fn){return snapDB().then(db=>new Promise((res,rej)=>{
+  const req=fn(db.transaction(SNAP_ST,modo).objectStore(SNAP_ST));
+  req.onsuccess=()=>res(req.result);req.onerror=()=>rej(req.error)}))}
+const snapGet=()=>snapTx('readonly',st=>st.get(SNAP_K)).catch(()=>null);
+const snapPut=v=>snapTx('readwrite',st=>st.put(v,SNAP_K)).catch(e=>console.warn('snap',e));
+const snapDel=()=>snapTx('readwrite',st=>st.delete(SNAP_K)).catch(()=>null);
+
+function snapBuild(){
+  const ok=files.filter(f=>f.status==='ok');
+  if(!ok.length)return null;
+  const ds=new Set();for(const f of ok)for(const d of f.dates)ds.add(d);
+  const dates=[...ds].sort(),di=new Map(dates.map((d,i)=>[d,i]));
+  const sk={},out=[];
+  for(const f of ok){
+    const R=[],src=f.recs;
+    for(let i=0;i<src.length;i+=4){const j=di.get(src[i+2]);if(j===undefined)continue;R.push(src[i],src[i+1],j,src[i+3])}
+    out.push({file:f.name,rows:f.rows,whs:[...f.whs],dates:[...f.dates],skus:[...f.skuSet],recs:R});
+    for(const x of f.skuSet){const k=skus.get(x);if(k)sk[x]=[k.name,k.batch,k.temp]}
+  }
+  const n=new Date();
+  return {generated_at:new Date(n.getTime()-n.getTimezoneOffset()*6e4).toISOString().slice(0,19),dates,skus:sk,files:out};
+}
+function snapSave(){try{const v=snapBuild();if(v)snapPut(v)}catch(e){console.warn('snap',e)}}
+function snapApply(B){
+  for(const [id,[nm,bt,tp]] of Object.entries(B.skus))skus.set(+id,{name:nm,batch:bt,temp:tName(tp)});
+  for(const F of B.files){const recs=[],R=F.recs;
+    for(let i=0;i<R.length;i+=4)recs.push(R[i],R[i+1],B.dates[R[i+2]],R[i+3]);
+    files.push({id:++fileSeq,name:F.file,status:'ok',pre:true,snap:true,recs,rows:F.rows,
+      whs:new Set(F.whs),dates:new Set(F.dates),skuSet:new Set(F.skus),
+      temps:new Set(F.skus.map(x=>skus.get(x).temp))});}
+}
+(async()=>{
+  const B=await snapGet();
+  if(!B||!B.files||!B.files.length)return;
+  if(baseGeneratedAt&&B.generated_at<=baseGeneratedAt)return;   // el del bot es mas nuevo
+  files=files.filter(f=>!f.pre);
+  snapApply(B);
+  recompute();
+  updateLastLoad(B.generated_at);
+})();
+
 // ---------- status strip ----------
 function fmtDateTime(iso){
   if(!iso) return null;
@@ -691,6 +741,7 @@ async function addFiles(list){
     }catch(e){f.status='err';f.msg=e.message;f.recs=[]}
     recompute();
   }
+  snapSave();
 }
 
 // ---------- merge & aggregate ----------
@@ -741,7 +792,7 @@ function renderFiles(){
   if(!files.length){el.innerHTML='<div class="empty">Muelle vacío. Cargá los archivos del plan.</div>';return}
   el.innerHTML=files.map(f=>{
     let ic=f.status==='ok'?'📦':f.status==='err'?'⚠️':'🚜';let m='';
-    if(f.status==='ok'){const ds=[...f.dates].sort();m=`${f.pre?'<span class="tag">precargado</span>':''}${nf.format(f.rows)} filas · ${f.whs.size} tiendas · ${nf.format(f.skuSet.size)} SKUs · ${ds.length?fmtD(ds[0])+' → '+fmtD(ds.at(-1)):''}`+(f.overK!=null&&files.filter(x=>x.status==='ok').length>1?` · <span class="mono">${nf.format(f.newK)}</span> combinaciones nuevas, <span class="mono">${nf.format(f.overK)}</span> pisadas`:'')}
+    if(f.status==='ok'){const ds=[...f.dates].sort();m=`${f.pre?(f.snap?'<span class="tag" style="background:#3a2f1e;color:#ffd34d">tu última carga</span>':'<span class="tag">precargado</span>'):''}${nf.format(f.rows)} filas · ${f.whs.size} tiendas · ${nf.format(f.skuSet.size)} SKUs · ${ds.length?fmtD(ds[0])+' → '+fmtD(ds.at(-1)):''}`+(f.overK!=null&&files.filter(x=>x.status==='ok').length>1?` · <span class="mono">${nf.format(f.newK)}</span> combinaciones nuevas, <span class="mono">${nf.format(f.overK)}</span> pisadas`:'')}
     else if(f.status==='err')m=f.msg;
     else m=`<div class="prog"><div class="bar" style="width:${(f.prog||0)*100}%"></div><svg class="mini" style="left:calc(${(f.prog||0)*100}% - 30px)" viewBox="0 0 30 20"><rect x="2" y="7" width="13" height="8" fill="#f5b800"/><rect x="5" y="2" width="7" height="6" fill="none" stroke="#ddd"/><rect x="17" y="1" width="2" height="16" fill="#888"/><rect x="19" y="6" width="9" height="8" fill="#b98448"/><circle cx="5" cy="17" r="3" fill="#222"/><circle cx="13" cy="17" r="3" fill="#222"/></svg></div>`;
     return `<div class="chip ${f.status}" id="f${f.id}"><div style="font-size:20px">${ic}</div><div><div class="n">${esc(f.name)}</div><div class="m">${m}</div></div><button class="x" data-id="${f.id}" title="Quitar">×</button></div>`}).join('');
@@ -890,7 +941,7 @@ fi.onchange=()=>{addFiles([...fi.files]);fi.value=''};
 ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
 drop.addEventListener('drop',e=>addFiles([...e.dataTransfer.files]));
 $('#files').onclick=e=>{const b=e.target.closest('.x');if(!b)return;files=files.filter(f=>f.id!=+b.dataset.id);recompute()};
-$('#clearAll').onclick=()=>{files=[];recompute()};
+$('#clearAll').onclick=()=>{files=[];snapDel();recompute()};
 $('#btnCargar').onclick=()=>{
   const btn=$('#btnCargar');
   const orig=btn.innerHTML;
