@@ -227,7 +227,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 05:45</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 06:00</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -1770,6 +1770,13 @@ function semCalc(C){
       // El Min de hoy se respeta solo si no pasa el Max objetivo: un Min de la V L mal
       // cargado (por ejemplo 260 con demanda 0,3/dia) no puede volverse la propuesta.
       if((r.min||0)>minT&&(r.min||0)<=maxP-pk&&(!t.fis||(r.min||0)+pk<=t.fis.u))minT=r.min||0;
+      // No se puede llenar picking con mercaderia que no esta: el Min de transicion se
+      // recorta a lo que hay hoy en picking mas almacenamiento. Lo que falta para el
+      // ideal queda informado aparte.
+      const disp=(+STK[String(r.s)]||0)+(+ALM[String(r.s)]||0);
+      const minIdeal=minT;
+      if(disp-pk<minT)minT=Math.max(t.piso,isNaN(t.B)?Math.floor(disp-pk):floorB(disp-pk,t.B));
+      const faltaIdeal=Math.max(0,minIdeal-minT);
       let acc,motivo;
       if(reabAct==null){acc='Corregir';motivo=diasMin>3?`Max ≤ Min y el Min cubre ${nf1.format(diasMin)} días de demanda`:'Hoy el Max no supera al Min'}
       else if(vlNoEntra){acc='Bajar';motivo=`El Max de la V L (${f0(r.max)}) no entra en su ubicación: caben ${f0(t.fis.u)} u.`+(t.fis.est?' (estimado)':'')}
@@ -1788,7 +1795,7 @@ function semCalc(C){
       prop.set(r.s,{min:minP,max:maxP});
       sku.push({s:r.s,name:r.name,grp:g.k,area:g.area,flujo:g.flujo,temp:r.temp,batch:r.batch,
         prom:r.prom,pico:r.pico,minAct:r.min,maxAct:r.max,minP,maxP,minT,diasMin,
-        maxFis:t.fis?t.fis.u:null,fisEst:t.fis?t.fis.est:false,entra,extra:t.extra||0,
+        maxFis:t.fis?t.fis.u:null,fisEst:t.fis?t.fis.est:false,entra,extra:t.extra||0,faltaAlm:Math.round(faltaIdeal),
         reabAct,reabProp,acc,motivo,dMin:minP-(r.min||0),dMax:maxP-(r.max||0),libera});
     }
     g.ocupProy=(g.ocupAct!=null&&g.espHoy>0)?Math.min(1,g.ocupAct*g.espProp/g.espHoy):null;
@@ -1812,8 +1819,7 @@ function semCalc(C){
   // La transicion solo se puede cumplir si hay mercaderia en almacenamiento para
   // llevar picking hasta el Min de transicion mas el pico del dia.
   let faltaAlm=0,uFaltaAlm=0;
-  for(const x of sku){const need=(x.minT||0)+(x.pico||0)-(+STK[String(x.s)]||0);const alm=+ALM[String(x.s)]||0;
-    if(need>alm){faltaAlm++;uFaltaAlm+=need-alm;x.faltaAlm=Math.round(need-alm)}}
+  for(const x of sku)if(x.faltaAlm>0){faltaAlm++;uFaltaAlm+=x.faltaAlm}
   const trHoy=transRun(C,(s,info)=>isNaN(info.min)?0:info.min);
   const trProp=transRun(C,(s,info)=>minTm.has(s)?minTm.get(s):(isNaN(info.min)?0:info.min));
   return {G:lista,sku,capSem:{secos:C.capS*nD,frio:C.capF*nD},tot,totAct,nD,simHoy,simProp,trHoy,trProp,v2:V2,
@@ -1837,9 +1843,11 @@ function transRun(C,minDe){
     const pres=[];for(let j=0;j<nD;j++)if(agg.dT[j].has(temp))pres.push(j);
     const avg=pres.length?pres.reduce((a,j)=>a+r0[j],0)/pres.length:0;
     let S=+(STK[String(s)]||0);stockIni+=S;
+    let A=+(ALM[String(s)]||0);          // lo que hay en almacenamiento (no cuenta lo que entra en la semana)
     for(let j=0;j<nD;j++){
       const d=(agg.dT[j].has(temp)?r0[j]:avg)*Math.pow(1+C.g,j);
-      if(d>0&&S<d){let q=d+mn-S;if(B>0)q=Math.ceil(q/B-1e-9)*B;out[j][pool]++;out[j].u+=q;S+=q}
+      if(d>0&&S<d){let q=d+mn-S;if(B>0)q=Math.ceil(q/B-1e-9)*B;q=Math.min(q,A);
+        if(q>0){out[j][pool]++;out[j].u+=q;S+=q;A-=q}}
       S=Math.max(0,S-d);
     }
     stockFin+=S;
@@ -1873,7 +1881,7 @@ function semTransHtml(R,C){
     h+=`<tr><td class="l">${fmtD(d,true)}</td><td>${nf.format(C.capS)}</td>${c(a.secos,C.capS)}${c(b.secos,C.capS)}<td>${nf.format(C.capF)}</td>${c(a.frio,C.capF)}${c(b.frio,C.capF)}<td>${nf.format(Math.round(b.u))}</td></tr>`});
   h+=`<tr class="tot"><td class="l">Semana</td><td></td><td>${nf.format(A.out.reduce((x,o)=>x+o.secos,0))}</td><td>${nf.format(B.out.reduce((x,o)=>x+o.secos,0))}</td><td></td><td>${nf.format(A.out.reduce((x,o)=>x+o.frio,0))}</td><td>${nf.format(B.out.reduce((x,o)=>x+o.frio,0))}</td><td>${nf.format(Math.round(B.u))}</td></tr></tbody></table></div>`+
     `<div class="note">Con Min de la V L: <b>${A.dias} de ${R.nD} días</b> sobre capacidad. Con Min de transición: <b>${B.dias} de ${R.nD} días</b>. Stock en picking al cierre de la semana: ${nf.format(Math.round(A.stockFin))} u. con la V L contra <b>${nf.format(Math.round(B.stockFin))} u.</b> con transición (hoy hay ${nf.format(Math.round(A.stockIni))} u.).</div>`+
-    (R.faltaAlm?`<div class="warn">⚠ <b>${nf.format(R.faltaAlm)} SKUs no tienen hoy suficiente stock en almacenamiento</b> para llevar picking a su Min de transición: faltan ${nf.format(Math.round(R.uFaltaAlm))} u. en total. Para esos, la transición depende de lo que entre de proveedores; la columna "Falta en almacenamiento" de la tabla dice cuánto.</div>`:'')+`</div>`;
+    (R.faltaAlm?`<div class="note">El Min de transición de la tabla ya está <b>recortado a lo que hay hoy</b> en picking más almacenamiento. Para llegar al ideal faltarían ${nf.format(Math.round(R.uFaltaAlm))} u. en ${nf.format(R.faltaAlm)} SKUs (columna "Falta para el ideal"): eso depende de compras y de lo que entre de proveedores.</div>`:'')+`</div>`;
   return h;
 }
 
@@ -1941,7 +1949,7 @@ const SEM_COLS=[
   ['Max físico (ubicación)',r=>r.maxFis==null?'':Math.round(r.maxFis)],
   ['Min transición (cargar ya)',r=>Math.round(r.minT)],
   ['Min final (modelo nuevo)',r=>Math.round(r.minP)],['Max objetivo',r=>Math.round(r.maxP)],
-  ['¿Entra ya?',r=>r.entra||''],['Ubicaciones extra',r=>r.extra||''],['Falta en almacenamiento (u.)',r=>r.faltaAlm||''],
+  ['¿Entra ya?',r=>r.entra||''],['Ubicaciones extra',r=>r.extra||''],['Falta para el ideal (u.)',r=>r.faltaAlm||''],
   ['Dif. Min',r=>Math.round(r.dMin)],['Dif. Max',r=>Math.round(r.dMax)],
   ['Espacio liberado (u.)',r=>Math.round(r.libera>0?r.libera:0)],
   ['Reab./sem hoy',r=>r.reabAct==null?'':r.reabAct.toFixed(1).replace('.',',')],
