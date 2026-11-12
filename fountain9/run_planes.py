@@ -115,13 +115,14 @@ def login(page):
     # Click en submit. Después del login Fountain9 puede quedarse en /login y mostrar el
     # modal "Choose Dataset" (no hay navegación), así que esperamos una de las dos cosas.
     page.locator("button[type=submit]").first.click()
-    modal_sel = "[role=dialog]:visible, .modal:visible, .ant-modal:visible"
+    modal_sel = "[role=dialog]:visible, .modal:visible, .ant-modal:visible, .MuiDialog-root:visible"
+    dataset = page.get_by_text("Choose Dataset")
     for _ in range(90):
-        if "/login" not in page.url or page.locator(modal_sel).count():
+        if "/login" not in page.url or page.locator(modal_sel).count() or dataset.count():
             break
         page.wait_for_timeout(1000)
 
-    if page.locator(modal_sel).count():
+    if page.locator(modal_sel).count() or dataset.count():
         print("LOGIN OK (modal post-login). URL:", page.url)
         pass_secondary_screen(page)
         return
@@ -139,6 +140,15 @@ def pass_secondary_screen(page):
     # Si después del login aparece un modal (p. ej. "Choose Dataset"), se loguea su contenido
     # y se confirma con el botón OK / Aceptar / Continuar.
     page.wait_for_timeout(2000)
+    # "Choose Dataset": viene con "rappi" elegido, alcanza con apretar OK.
+    if page.get_by_text("Choose Dataset").count():
+        ok = page.get_by_role("button", name=re.compile(r"^\s*OK\s*$", re.I)).first
+        if not ok.count():
+            ok = page.locator("button:visible", has_text=re.compile(r"^\s*OK\s*$")).first
+        ok.click(timeout=15_000)
+        print("CHOOSE DATASET: clic en OK. URL:", page.url)
+        page.wait_for_timeout(4000)
+        return
     modal = page.locator("[role=dialog]:visible, .modal:visible, .ant-modal:visible").first
     if not modal.count():
         print("SIN PANTALLA SECUNDARIA. URL:", page.url)
