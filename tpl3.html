@@ -139,6 +139,7 @@ th{position:sticky;top:0;background:#20252c;color:var(--ink2);font-weight:600;z-
 th.l,td.l{text-align:left}
 tr.tot td{position:sticky;top:31px;background:#2a2716;color:var(--yellow2);font-weight:700;z-index:1}
 td.z{color:#4c555f}
+tr.avgr td{background:#1f2420;color:#eceff2;font-weight:600;border-bottom:2px solid #3a414a}
 tbody tr:hover td{background:#232830}
 td.nm{max-width:300px;overflow:hidden;text-overflow:ellipsis;color:var(--ink2)}
 .heat{position:relative}
@@ -227,7 +228,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-11 06:00</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-12 11:30</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -881,9 +882,14 @@ function bars(sel,D,V,color,unit,capRef){
     g+=`<rect class="hit" data-i="${i}" x="${ml+bw*i}" y="${mt}" width="${bw}" height="${H-mt-mb}" fill="transparent"/>`;
   });
   g+=`<line x1="${ml}" x2="${W-mr}" y1="${y(0)}" y2="${y(0)}" stroke="#56616d"/>`;
+  const avg=V.length?V.reduce((a,b)=>a+b,0)/V.length:0;
+  if(avg>0){const ya=y(avg),lbl=`Prom. semanal ${nf.format(Math.round(avg))}`;
+    g+=`<line x1="${ml}" x2="${W-mr}" y1="${ya}" y2="${ya}" stroke="#eceff2" stroke-width="1.5" stroke-dasharray="6 4" opacity=".75"/>`+
+       `<rect x="${W-mr-lbl.length*6.4-10}" y="${ya-17}" width="${lbl.length*6.4+8}" height="15" rx="3" fill="#121519" opacity=".85"/>`+
+       `<text x="${W-mr-6}" y="${ya-6}" fill="#eceff2" font-size="11" font-weight="600" text-anchor="end">${lbl}</text>`}
   svg.innerHTML=g;
   svg.querySelectorAll('.hit').forEach(r=>{
-    r.onmousemove=e=>{const i=+r.dataset.i;tip.style.display='block';tip.innerHTML=`${fmtD(D[i],true)}${curA?.estDay[i]?' · incluye estimado':agg.partial[i]?' ⚠ incompleto':''}<br><b>${nf.format(Math.round(V[i]))}</b> ${unit}`+(capRef&&capRef[i]!=null?`<br><span style="color:#7f8994">Capacidad</span> <b>${nf.format(capRef[i])}</b><br><span style="color:${V[i]>capRef[i]?'#ff9d97':'#9fe0a8'}">${V[i]>capRef[i]?'Excede por ':'Sobra '}${nf.format(Math.abs(Math.round(V[i]-capRef[i])))}</span>`:'');const bb=box.getBoundingClientRect();let lx=e.clientX-bb.left+12;if(lx>bb.width-150)lx-=170;tip.style.left=lx+'px';tip.style.top=(e.clientY-bb.top-10)+'px';r.setAttribute('fill','#ffffff0d')};
+    r.onmousemove=e=>{const i=+r.dataset.i;tip.style.display='block';tip.innerHTML=`${fmtD(D[i],true)}${curA?.estDay[i]?' · incluye estimado':agg.partial[i]?' ⚠ incompleto':''}<br><b>${nf.format(Math.round(V[i]))}</b> ${unit}`+(avg>0?`<br><span style="color:#7f8994">vs prom. semanal</span> <b>${V[i]>=avg?'+':''}${nf1.format((V[i]/avg-1)*100)}%</b>`:'')+(capRef&&capRef[i]!=null?`<br><span style="color:#7f8994">Capacidad</span> <b>${nf.format(capRef[i])}</b><br><span style="color:${V[i]>capRef[i]?'#ff9d97':'#9fe0a8'}">${V[i]>capRef[i]?'Excede por ':'Sobra '}${nf.format(Math.abs(Math.round(V[i]-capRef[i])))}</span>`:'');const bb=box.getBoundingClientRect();let lx=e.clientX-bb.left+12;if(lx>bb.width-150)lx-=170;tip.style.left=lx+'px';tip.style.top=(e.clientY-bb.top-10)+'px';r.setAttribute('fill','#ffffff0d')};
     r.onmouseleave=()=>{tip.style.display='none';r.setAttribute('fill','transparent')};
   });
 }
@@ -906,7 +912,7 @@ function renderTemp(D,A){
     let h='<thead><tr><th class="l">Fecha</th>'+ts.map(t=>`<th>${tSt(t)[1]} ${esc(t)}</th>`).join('')+'<th class="tt">Total</th></tr></thead><tbody>';
     h+='<tr class="tot"><td class="l">Total</td>'+tot.map((v,k)=>`<td class="${k===n-2?'tt':''}">${nf.format(Math.round(v))}</td>`).join('')+'</tr>';
     rows.forEach((r,j)=>{h+=`<tr><td class="l">${fmtD(D[j])}${pmark(j)}</td>`+r.slice(1).map((v,k)=>{const e=k<ts.length?A.est.has(ts[k]+'|'+j):A.estDay[j];return `<td class="${v?'':'z'}${k===n-2?' tt hi':''}${e?' est':''}">${e?'≈ ':''}${nf.format(Math.round(v))}</td>`}).join('')+'</tr>'});
-    h+='<tr class="tot"><td class="l">Promedio</td>'+tot.map((v,k)=>`<td class="${k===n-2?'tt':''}">${nf.format(Math.round(v/rows.length))}</td>`).join('')+'</tr>';
+    h+='<tr class="tot"><td class="l">Promedio semanal (por día)</td>'+tot.map((v,k)=>`<td class="${k===n-2?'tt':''}">${nf.format(Math.round(v/rows.length))}</td>`).join('')+'</tr>';
     $(K==='l'?'#tTempT':'#tTempU').innerHTML=h+'</tbody>';
   }
 }
@@ -919,6 +925,8 @@ function renderDaily(D,A){
   let h='<thead><tr>'+hd.map((x,i)=>`<th class="${i?'':'l'}">${x}</th>`).join('')+'</tr></thead><tbody>';
   const tot=[0,0];dailyRows.forEach(r=>{tot[0]+=r[1];tot[1]+=r[2]});
   h+=`<tr class="tot"><td class="l">Total</td><td>${nf.format(Math.round(tot[0]))}</td><td>${nf.format(Math.round(tot[1]))}</td><td>${nf1.format(tot[0]/(tot[1]||1))}</td><td></td><td></td></tr>`;
+  const nD=dailyRows.length||1;
+  h+=`<tr class="avgr"><td class="l">Promedio semanal (por día)</td><td>${nf.format(Math.round(tot[0]/nD))}</td><td>${nf.format(Math.round(tot[1]/nD))}</td><td>${nf1.format(tot[0]/(tot[1]||1))}</td><td>${nf.format(Math.round(dailyRows.reduce((a,r)=>a+r[4],0)/nD))}</td><td>${nf.format(Math.round(dailyRows.reduce((a,r)=>a+r[5],0)/nD))}</td></tr>`;
   dailyRows.forEach((r,i)=>{h+=`<tr><td class="l">${r[0]}${pmark(i)}</td>`+`<td class="${A.u[i]===mxU?'hi':''}${A.estDay[i]?' est':''}">${nf.format(Math.round(r[1]))}</td><td class="${T[i]===mxT?'hi':''}${A.estDay[i]?' est':''}">${nf.format(Math.round(r[2]))}</td><td>${nf1.format(r[3])}</td><td>${r[4]}</td><td>${nf.format(r[5])}</td></tr>`});
   $('#tDaily').innerHTML=h+'</tbody>';
 }
