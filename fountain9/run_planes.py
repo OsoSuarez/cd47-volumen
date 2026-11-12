@@ -112,14 +112,19 @@ def login(page):
     }""")
     print("ESTADO PRE-SUBMIT:", btn_info)
 
-    # Click en submit — usamos expect_navigation para esperar la redirección
-    try:
-        with page.expect_navigation(wait_until="domcontentloaded", timeout=90_000):
-            page.locator("button[type=submit]").first.click()
-    except Exception as e:
-        # Si el click dispara la navegación pero expect_navigation falla, revisamos la URL
-        print(f"expect_navigation error: {e}")
-        page.wait_for_timeout(3000)
+    # Click en submit. Después del login Fountain9 puede quedarse en /login y mostrar el
+    # modal "Choose Dataset" (no hay navegación), así que esperamos una de las dos cosas.
+    page.locator("button[type=submit]").first.click()
+    modal_sel = "[role=dialog]:visible, .modal:visible, .ant-modal:visible"
+    for _ in range(90):
+        if "/login" not in page.url or page.locator(modal_sel).count():
+            break
+        page.wait_for_timeout(1000)
+
+    if page.locator(modal_sel).count():
+        print("LOGIN OK (modal post-login). URL:", page.url)
+        pass_secondary_screen(page)
+        return
 
     if "/login" in page.url:
         print("LOGIN FALLIDO. URL:", page.url)
