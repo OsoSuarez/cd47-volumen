@@ -13,6 +13,7 @@ on:
       - 'fetch_sheets.py'
       - 'base.json'
       - 'vl.json'
+      - 'trv.json'
       - '.github/workflows/actualizar.yml'
 
 permissions:
@@ -44,6 +45,7 @@ jobs:
         run: |
           mkdir -p site
           cp volumen_futuro.html site/index.html
+          cp trv.json site/trv.json
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

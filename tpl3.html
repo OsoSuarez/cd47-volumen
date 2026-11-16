@@ -2216,7 +2216,13 @@ var TRV_K='trv_v1';
 var trv={tr:{},plan:{},names:{}}; // tr[fecha]={file,at,rows:[w,s,o,p,d,...],meta:{s:[temp,transf]}}; plan[fecha]={inicio:[w,s,q,...]}
 var trvListo=false,trvPend=false;
 function trvGuardar(){return snapTx('readwrite',st=>st.put(trv,TRV_K)).catch(e=>console.warn('trv',e))}
-snapTx('readonly',st=>st.get(TRV_K)).then(v=>{if(v&&v.tr)trv=v;trvListo=true;if(trvPend)trvPlanDesdeAgg();trvRender()}).catch(()=>{trvListo=true});
+// Excel publicado en el repo (trv.json): lo ve cualquiera que abra el link. Si en este
+// navegador ya hay una carga mas nueva del mismo dia, esa gana.
+function trvPublicado(){return fetch('trv.json?v='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null).then(P=>{
+  if(!P||!P.tr)return;
+  for(const [d,T] of Object.entries(P.tr)){const L=trv.tr[d];if(!L||(T.at||0)>(L.at||0)){T.pub=true;trv.tr[d]=T}}
+  for(const [s,n] of Object.entries(P.names||{}))if(!trv.names[s])trv.names[s]=n})}
+snapTx('readonly',st=>st.get(TRV_K)).catch(()=>null).then(v=>{if(v&&v.tr)trv=v;return trvPublicado()}).then(()=>{trvListo=true;if(trvPend)trvPlanDesdeAgg();trvRender()});
 // Lo llama recompute: copia lo que el plan cargado dice para cada fecha.
 function trvPlanDesdeAgg(){
   if(!trvListo){trvPend=true;return}
@@ -2298,7 +2304,7 @@ function trvRender(){
   if(!$('#trvDia'))return;
   const dias=Object.keys(trv.tr).sort();
   $('#trvFiles').innerHTML=dias.map(d=>{const T=trv.tr[d];const n=T.rows.length/5;const tienePlan=trvPlanes(d).length>0;
-    return `<div class="chip ${tienePlan?'':'err'}"><div style="font-size:20px">🚚</div><div><div class="n">${fmtD(d,true)} · ${esc(T.file)}</div><div class="m">${nf.format(n)} tareas (tienda × SKU) · ${tienePlan?'<span class="tag">con plan para comparar</span>':'sin plan guardado para ese día: cargá un plan que lo incluya'}</div></div><span></span></div>`}).join('')||'<div class="empty">Todavía no cargaste ningún Excel de TRs.</div>';
+    return `<div class="chip ${tienePlan?'':'err'}"><div style="font-size:20px">🚚</div><div><div class="n">${fmtD(d,true)} · ${esc(T.file)}</div><div class="m">${T.pub?'<span class="tag">publicado en el link</span> · ':''}${nf.format(n)} tareas (tienda × SKU) · ${tienePlan?'<span class="tag">con plan para comparar</span>':'sin plan guardado para ese día: cargá un plan que lo incluya'}</div></div><span></span></div>`}).join('')||'<div class="empty">Todavía no cargaste ningún Excel de TRs.</div>';
   if(!trvSel||!trv.tr[trvSel])trvSel=dias.at(-1)||null;
   $('#trvDia').innerHTML=dias.map(d=>`<option value="${d}">${fmtD(d,true)}</option>`).join('');if(trvSel)$('#trvDia').value=trvSel;
   const pls=trvSel?trvPlanes(trvSel):[];const prevPl=$('#trvPlan').value;
