@@ -1,0 +1,107 @@
+{
+ "rows": [
+  [
+   "Fecha",
+   "Secos req / 546",
+   "Frío req / 150",
+   "Total req / 696",
+   "Uso",
+   "Estado",
+   "Sugerencia de personal",
+   "Con cambios secos / frío",
+   "Con cambios"
+  ],
+  [
+   "lun 16/11",
+   "345",
+   "154",
+   "499",
+   "72%",
+   "⇄ Reasignar",
+   "Pasar 1 de secos → frío",
+   "294 / 160",
+   "⇄ Reasignar"
+  ],
+  [
+   "mar 17/11",
+   "252",
+   "108",
+   "360",
+   "52%",
+   "✔ OK",
+   "—",
+   "316 / 115",
+   "✔ OK"
+  ],
+  [
+   "mié 18/11",
+   "407",
+   "157",
+   "564",
+   "81%",
+   "⇄ Reasignar",
+   "Pasar 1 de secos → frío",
+   "382 / 124",
+   "✔ OK"
+  ],
+  [
+   "jue 19/11",
+   "453",
+   "174",
+   "627",
+   "90%",
+   "⇄ Reasignar",
+   "Pasar 1 de secos → frío",
+   "446 / 144",
+   "✔ OK"
+  ],
+  [
+   "vie 20/11",
+   "449",
+   "303",
+   "752",
+   "108%",
+   "⚠ Falta gente",
+   "Pasar 1 de secos → frío y sumar 2 en frío",
+   "493 / 255",
+   "⚠ Falta gente"
+  ],
+  [
+   "dom 22/11",
+   "268",
+   "275",
+   "543",
+   "78%",
+   "⇄ Reasignar",
+   "Pasar 2 de secos → frío",
+   "344 / 208",
+   "⇄ Reasignar"
+  ],
+  [
+   "lun 23/11",
+   "299",
+   "252",
+   "551",
+   "79%",
+   "⇄ Reasignar",
+   "Pasar 2 de secos → frío",
+   "411 / 199",
+   "⇄ Reasignar"
+  ],
+  [
+   "Semana",
+   "2.473",
+   "1.423",
+   "3.896",
+   "80%",
+   "1/7 OK",
+   "6/7 días se arreglan moviendo gente",
+   "2.686 / 1.205",
+   "3/7 OK"
+  ]
+ ],
+ "kpis": "CAPACIDAD / DÍA\n696\n546 secos · 150 frío\nREABASTOS REQ. PROM./DÍA\n557\npico 752 en un día\nDÍAS SOBRE CAPACIDAD\n6 de 7\ndías con más reabastos que capacidad\nCOLA AL ÚLTIMO DÍA\n102\nreabastos que quedan sin hacer\nFALTANTE ESTIMADO\n14\nunidades sin stock en picking (acum.)",
+ "warn": "⚠ 6 de 7 días superan la capacidad de 696 reabastos/día. Con los Min/Max de la V L de hoy, la cola crece y quedan 102 reabastos pendientes al cierre. La propuesta que entra en capacidad está arriba, en la recomendación por grupo y por SKU.",
+ "note": "Cada persona rinde unos 91 reabastos por día en secos y 75 en frío (productividad × horas de la zona a la que va). ⇄ Reasignar = el total entra y alcanza con mover gente; ⚠ Falta gente = ni moviendo alcanza.",
+ "errs": []
+}
