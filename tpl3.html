@@ -228,7 +228,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 19:00</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 19:10</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -2244,7 +2244,8 @@ function trvComparar(d,ref,qi){
   const m=new Map();
   for(let i=0;i<P.length;i+=3){const k=P[i]+'|'+P[i+1];m.set(k,{w:P[i],s:P[i+1],pl:P[i+2],ej:0})}
   for(let i=0;i<T.rows.length;i+=5){const k=T.rows[i]+'|'+T.rows[i+1];const e=T.rows[i+2+qi];let r=m.get(k);if(!r){r={w:T.rows[i],s:T.rows[i+1],pl:0,ej:0};m.set(k,r)}r.ej+=e}
-  const temp=s=>(T.meta[s]&&T.meta[s][0])||(skus.get(+s)?.temp)||'Sin dato';
+  // Misma etiqueta que el plan (Ambiente, Fruver, Refrigerado, Congelado), venga de donde venga.
+  const temp=s=>{const pl=skus.get(+s)?.temp;if(pl)return pl;const t=(T.meta[s]&&T.meta[s][0])||'';return TMAP[t.trim().toLowerCase()]||t||'Sin dato'};
   const R={tPl:0,tEj:0,uPl:0,uEj:0,ambas:0,sinPlan:0,noSalio:0,absDif:0,rows:[...m.values()],temp};
   for(const r of R.rows){const p=r.pl>0,e=r.ej>0;if(p)R.tPl++;if(e)R.tEj++;if(p&&e)R.ambas++;else if(e)R.sinPlan++;else if(p)R.noSalio++;R.uPl+=r.pl;R.uEj+=r.ej;R.absDif+=Math.abs(r.ej-r.pl)}
   return R}
