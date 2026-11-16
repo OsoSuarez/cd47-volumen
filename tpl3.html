@@ -228,7 +228,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 17:45</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 18:00</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -487,11 +487,12 @@ table.cmp td.hi{color:var(--yellow2)}
   <div id="simWarn"></div>
   <div class="panel">
     <div class="ptitle">Reabastos requeridos por día</div>
-    <div class="note" style="margin-top:0">Cada zona tiene su propia capacidad y no se compensan: la gente de frío no repone secos. La sombra es la capacidad de cada zona.</div>
+    <div class="note" style="margin-top:0">Cada zona tiene su propia capacidad y no se compensan: la gente de frío no repone secos. La línea verde es la capacidad; lo que se pasa queda en rojo.</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px">
       <div class="chart" id="chSim"><div class="cap" id="simCap"></div><svg></svg><div class="tip"></div></div>
       <div class="chart" id="chSimF"><div class="cap" id="simCapF"></div><svg></svg><div class="tip"></div></div>
     </div>
+    <div class="chart" id="chSimT" style="margin-top:14px"><div class="cap" id="simCapT"></div><svg></svg><div class="tip"></div></div>
   </div>
   <div class="panel">
     <div class="ptitle" style="margin-bottom:12px">Simulación diaria</div>
@@ -877,20 +878,20 @@ function renderAll(){
   bars('#chU',D,U,'#f5b800','unidades');
   renderCapTbl();
   const capRef=D.map(d=>capFor(d));
-  $('#capT').textContent='Tareas por día · sombra = capacidad ('+(capCfg.useSheet?'sheet':'calculada')+')';
+  $('#capT').textContent='Tareas por día · línea verde = capacidad ('+(capCfg.useSheet?'sheet':'calculada')+')';
   bars('#chT',D,T,'#41b8a8','tareas',capRef);
   renderTemp(D,A);renderDaily(D,A);renderMat('U');renderMat('T');
 }
 
 function bars(sel,D,V,color,unit,capRef){
   const box=$(sel),svg=box.querySelector('svg'),tip=box.querySelector('.tip');
-  const W=svg.clientWidth||560,H=215,ml=54,mr=10,mt=16,mb=38;
+  const W=svg.clientWidth||560,H=svg.clientHeight||215,ml=54,mr=10,mt=18,mb=38;
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   const max=Math.max(...V,...(capRef||[]).filter(x=>x!=null),1);const step=nice(max/4);const top=Math.ceil(max/step)*step;
   const y=v=>mt+(H-mt-mb)*(1-v/top);const bw=(W-ml-mr)/D.length;const w=Math.max(6,bw*0.62);
   let g='';for(let t=0;t<=top+1e-9;t+=step){g+=`<line x1="${ml}" x2="${W-mr}" y1="${y(t)}" y2="${y(t)}" stroke="#2c323a"/><text x="${ml-8}" y="${y(t)+4}" fill="#7f8994" font-size="11" text-anchor="end">${nf.format(t)}</text>`}
   let pk=0;V.forEach((v,i)=>{if(v>V[pk])pk=i});
-  if(capRef)D.forEach((d,i)=>{if(capRef[i]==null)return;const rx=ml+bw*i+bw*0.08,rw=bw*0.84,ry=y(capRef[i]),rh=Math.max(y(0)-ry,0);g+=`<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="#41b8a8" opacity=".14" stroke="#41b8a8" stroke-opacity=".7" stroke-dasharray="4 3"/>`});
+  if(capRef)D.forEach((d,i)=>{if(capRef[i]==null)return;const rx=ml+bw*i+bw*0.08,rw=bw*0.84,ry=y(capRef[i]),rh=Math.max(y(0)-ry,0);g+=`<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="#41b8a8" opacity=".08"/>`});
   D.forEach((d,i)=>{const x=ml+bw*i+(bw-w)/2,yy=y(V[i]),h=y(0)-yy,r=Math.min(4,h,w/2);
     g+=h>0?`<path d="M${x},${y(0)}V${yy+r}q0,-${r} ${r},-${r}h${w-2*r}q${r},0 ${r},${r}V${y(0)}z" fill="${color}" opacity="${curA?.estDay[i]?.45:i===pk?1:.82}"${curA?.estDay[i]?' stroke="'+color+'" stroke-dasharray="3 2"':''}/>`:'';
     const [,m,dd]=d.split('-');g+=`<text x="${x+w/2}" y="${H-mb+15}" fill="${curA?.estDay[i]?'#8ec5ff':agg.partial[i]?'#e5534b':'#b4bcc6'}" font-size="11" text-anchor="middle">${dd}/${m}</text><text x="${x+w/2}" y="${H-mb+28}" fill="#7f8994" font-size="10" text-anchor="middle">${DOW[new Date(d+'T12:00').getDay()]}</text>`;
@@ -898,6 +899,18 @@ function bars(sel,D,V,color,unit,capRef){
     g+=`<rect class="hit" data-i="${i}" x="${ml+bw*i}" y="${mt}" width="${bw}" height="${H-mt-mb}" fill="transparent"/>`;
   });
   g+=`<line x1="${ml}" x2="${W-mr}" y1="${y(0)}" y2="${y(0)}" stroke="#56616d"/>`;
+  if(capRef&&capRef.some(c=>c!=null)){
+    // Parte de cada barra que queda arriba de la capacidad, en rojo.
+    D.forEach((d,i)=>{const c=capRef[i];if(c==null||V[i]<=c)return;const x=ml+bw*i+(bw-w)/2,yc=y(c),yy=y(V[i]);
+      g+=`<rect x="${x}" y="${yy}" width="${w}" height="${Math.max(yc-yy,0)}" fill="#e5534b" opacity=".85"/>`});
+    // Linea de capacidad: un tramo por dia, unido en escalon cuando cambia.
+    let path='';D.forEach((d,i)=>{const c=capRef[i];if(c==null)return;const x0=ml+bw*i,x1=ml+bw*(i+1),yc=y(c);
+      path+=(path&&capRef[i-1]!=null?`L${x0},${yc}`:`M${x0},${yc}`)+`L${x1},${yc}`});
+    g+=`<path d="${path}" fill="none" stroke="#41b8a8" stroke-width="2.5"/>`;
+    const cs=capRef.filter(c=>c!=null),igual=cs.every(c=>c===cs[0]);
+    const lc=igual?`Capacidad ${nf.format(Math.round(cs[0]))}`:'Capacidad';const yl=y(cs[0]);
+    g+=`<rect x="${ml+4}" y="${yl-17}" width="${lc.length*6.4+8}" height="15" rx="3" fill="#121519" opacity=".85"/><text x="${ml+8}" y="${yl-6}" fill="#41b8a8" font-size="11" font-weight="700">${lc}</text>`;
+  }
   const avg=V.length?V.reduce((a,b)=>a+b,0)/V.length:0;
   if(avg>0){const ya=y(avg),lbl=`Prom. semanal ${nf.format(Math.round(avg))}`;
     g+=`<line x1="${ml}" x2="${W-mr}" y1="${ya}" y2="${ya}" stroke="#eceff2" stroke-width="1.5" stroke-dasharray="6 4" opacity=".75"/>`+
@@ -2054,6 +2067,8 @@ function renderSim(){
   DT.innerHTML=h+'</tbody>';
   bars('#chSim',R.D,R.out.map(d=>d.secos.req),'#f5b800','reabastos de secos',R.D.map(()=>C.capS));
   bars('#chSimF',R.D,R.out.map(d=>d.frio.req),'#4f9be8','reabastos de frío',R.D.map(()=>C.capF));
+  bars('#chSimT',R.D,R.out.map(d=>d.secos.req+d.frio.req),'#c9a3ff','reabastos en total (secos + frío)',R.D.map(()=>C.capS+C.capF));
+  $('#simCapT').innerHTML=`<b>Total CD (macro)</b> · secos + frío · capacidad ${nf.format(C.capS+C.capF)} por día. <span style="color:#7f8994">Ojo: el total puede entrar aunque una zona se pase; mirá también cada zona.</span>`;
   $('#simCapF').textContent=`Frío · capacidad ${nf.format(C.capF)} por día`;
   $('#simCap').textContent=`Secos · capacidad ${nf.format(C.capS)} por día`;
   let th='<thead><tr><th class="l">SKU ID</th><th class="l">SKU Name</th><th class="l">Pool</th><th class="l">Temp.</th><th>Reabastos</th><th>Pico diario</th><th>Min</th><th>Max actual</th><th>Max propuesto</th><th>Faltante (uds)</th></tr></thead><tbody>';
