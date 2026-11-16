@@ -230,7 +230,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 19:45</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 19:55</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -1670,7 +1670,7 @@ function semCalc(C){
     }
     let pres=g.kEsp*espHoy-espMin;                 // espacio disponible para los ciclos
     g.apretado=pres<espPiso;if(g.apretado)pres=espPiso;
-    g.espHoy=espHoy;g.espProp=0;g.reabAct=0;g.reabProp=0;g.invAct=0;g.invMenor=0;g.invIgual=0;
+    g.espHoy=espHoy;g.espProp=0;g.reabAct=0;g.reabProp=0;g.invAct=0;g.invMenor=0;g.invIgual=0;g.invFis=0;
     // Ningun SKU recibe mas de capD dias de demanda de ciclo: mas que eso es stock
     // parado en picking. Lo que sobra de los topados se reparte entre el resto, y
     // si todos llegan al tope el espacio restante queda libre.
@@ -1863,7 +1863,7 @@ function semCalc(C){
       const faltaIdeal=Math.max(0,minIdeal-minT);
       let acc,motivo;
       if(reabAct==null){acc='Corregir';const menor=(r.max||0)<(r.min||0);
-        motivo=(menor?`Max (${f0(r.max||0)}) por debajo del Min (${f0(r.min||0)})`:`Min igual al Max (${f0(r.min||0)}): no hay ciclo de reabasto`)+(diasMin>3?` · el Min cubre ${nf1.format(diasMin)} días de demanda`:'')}
+        motivo=(menor?`Max (${f0(r.max||0)}) por debajo del Min (${f0(r.min||0)})`:(r.max||0)===(r.min||0)?`Min igual al Max (${f0(r.min||0)}): no hay ciclo de reabasto`:`En la ubicación entran ${f0(t.fis?t.fis.u:0)} u., menos que el Min (${f0(r.min||0)}): el Max de la V L (${f0(r.max||0)}) no se puede guardar`)+(diasMin>3?` · el Min cubre ${nf1.format(diasMin)} días de demanda`:'')}
       else if(vlNoEntra){acc='Bajar';motivo=`El Max de la V L (${f0(r.max)}) no entra en su ubicación: caben ${f0(t.fis.u)} u.`+(t.fis.est?' (estimado)':'')}
       else if(maxP>r.max*1.05){acc='Subir';motivo=`Más Max: pasa de ${nf1.format(reabAct)} a ${nf1.format(reabProp)} reabastos por semana`}
       else if(maxP<r.max*0.85){acc='Bajar';motivo=g.frio?`Frío no crece: cede ${f0(libera)} u. a los SKUs que más rotan`:`Grupo al ${pctTxt(g.ocupAct)}: cede ${f0(libera)} u. a los que más rotan`}
@@ -1875,7 +1875,7 @@ function semCalc(C){
       if(V2&&acc==='Subir'&&t.extra)entra=`Necesita ${t.extra} ubicación${t.extra>1?'es':''} de picking más`;
       else if(V2&&acc==='Subir')entra=noEntra?'No entra ni el Min':(t.fis?'Sí, en su ubicación'+(t.fis.est?' (estimado)':''):(holgado?`Sí, el grupo está al ${pctTxt(g.ocupAct)}`:`Depende de liberar espacio`+(g.ocupAct!=null?` (grupo al ${pctTxt(g.ocupAct)})`:' (sin dato de ubicación)')));
       g.espProp+=maxP*t.v;g.reabProp+=reabProp;
-      if(reabAct==null){g.invAct++;if((r.max||0)<(r.min||0))g.invMenor++;else g.invIgual++}else g.reabAct+=reabAct;
+      if(reabAct==null){g.invAct++;if((r.max||0)<(r.min||0))g.invMenor++;else if((r.max||0)===(r.min||0))g.invIgual++;else g.invFis++}else g.reabAct+=reabAct;
       if(t.fis)g.conFis=(g.conFis||0)+1;
       prop.set(r.s,{min:minP,max:maxP});
       sku.push({s:r.s,name:r.name,grp:g.k,area:g.area,flujo:g.flujo,temp:r.temp,batch:r.batch,
@@ -1975,7 +1975,7 @@ function renderSem(C){
   const KP=$('#semKpis'),W=$('#semWarn'),GR=$('#semGrp');
   const R=semR=semCalc(C);
   const actT=R.totAct.secos+R.totAct.frio,propT=R.tot.secos+R.tot.frio,capT=R.capSem.secos+R.capSem.frio;
-  const invHoy=R.G.reduce((a,g)=>a+g.invAct,0),invMenor=R.G.reduce((a,g)=>a+g.invMenor,0),invIgual=R.G.reduce((a,g)=>a+g.invIgual,0);
+  const invHoy=R.G.reduce((a,g)=>a+g.invAct,0),invMenor=R.G.reduce((a,g)=>a+g.invMenor,0),invIgual=R.G.reduce((a,g)=>a+g.invIgual,0),invFis=R.G.reduce((a,g)=>a+(g.invFis||0),0);
   KP.innerHTML=[
     ['Capacidad de la semana',nf.format(Math.round(capT)),`${nf.format(Math.round(R.capSem.secos))} secos · ${nf.format(Math.round(R.capSem.frio))} frío · ${R.nD} días`],
     ['Reabastos hoy (V L)',nf.format(Math.round(actT)),R.v2&&R.noEntra?`con el Max recortado a lo que entra en ${nf.format(R.noEntra)} SKUs (sin recortar: ${nf.format(Math.round(R.reabRaw))}) · sin contar ${nf.format(invHoy)} con Max ≤ Min`:`sin contar ${nf.format(invHoy)} SKUs con Max ≤ Min`],
@@ -1991,6 +1991,7 @@ function renderSem(C){
          :`<div class="warn" style="border-color:#24502f;background:#16241b;color:#9fe0a8">✔ La propuesta pasa la prueba del simulador diario: no deja más cola ni más faltante que la configuración de hoy.</div>`)+
     (invMenor?`<div class="warn"><b>Max por debajo del Min: ${nf.format(invMenor)} SKUs en la V L.</b> Es un error de carga: el sistema no puede reponer bien. Marcados como Corregir.</div>`:'')+
     (invIgual?`<div class="warn" style="border-color:#7a5a1e;background:#2a2312;color:#ffd99a"><b>Min igual al Max: ${nf.format(invIgual)} SKUs en la V L.</b> No hay ciclo: cada vez que baja un poco hay que reponer. Marcados como Corregir.</div>`:'')+
+    (invFis?`<div class="warn" style="border-color:#1f4f7a;background:#13202e;color:#a9d1ff"><b>No entra en la ubicación: ${nf.format(invFis)} SKUs.</b> En su ubicación de picking caben menos unidades que su Min, así que el Max de la V L no se puede guardar. Hay que bajar el Min o darle más lugar. Marcados como Corregir.</div>`:'')+
     (invHoy?`<div class="note">Esos ${nf.format(invHoy)} SKUs van aparte en la prueba de capacidad, porque su reabasto real de hoy es incierto. En la tabla, filtrá Acción = Corregir y mirá el motivo.</div>`:'')+
     `<div class="panel" style="margin-top:12px"><div class="ptitle" style="margin-bottom:10px">Prueba en el simulador diario · misma demanda, misma capacidad</div><div class="tbl"><table><thead><tr><th class="l">Escenario</th><th>Reabastos ejecutados</th><th>Cola al último día</th><th>Días sobre capacidad</th><th>Faltante en picking (u.)</th></tr></thead><tbody>`+
     fila('Hoy (V L)',H,H.ejAparte?` <span class="cap2">+ ${nf.format(H.ejAparte)} de los SKUs sin ciclo</span>`:'')+fila('Propuesta',P)+`</tbody></table></div>`+
