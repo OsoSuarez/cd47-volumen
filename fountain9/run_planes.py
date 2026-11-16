@@ -277,25 +277,69 @@ def create_plan(page, preset, texto_opcion):
     print(f"Plan disparado para {preset}")
 
 
-def download_last_two(page):
-    page.get_by_text("View & Edit Plans").click()
+def _abrir_lista_planes(page):
+    # Vuelve a la lista de planes desde cero, para que el segundo plan no herede
+    # menus abiertos o el plan anterior seleccionado.
+    go_replenishment(page)
+    esperar_carga(page)
+    cerrar_avisos(page)
+    page.get_by_text("View & Edit Plans").first.click(timeout=30_000)
     page.wait_for_timeout(3000)
+    esperar_carga(page)
+
+
+def download_last_two(page):
     OUT.mkdir(exist_ok=True)
-    cards = page.get_by_text(re.compile(r"All - Fixed Schedule Replenishment Plan"))
+    patron = re.compile(r"All - Fixed Schedule Replenishment Plan")
     for i in range(2):  # las dos primeras tarjetas son las más recientes
-        cards.nth(i).click()
-        page.wait_for_timeout(2000)
-        page.get_by_text("Export as CSV").click()
-        page.get_by_text("Download All Rows").hover()
-        with page.expect_download(timeout=180_000) as dl:
-            page.get_by_text("All Columns", exact=True).click()
-        dl.value.save_as(OUT / f"plan_{i + 1}_{dl.value.suggested_filename}")
-        page.keyboard.press("Escape")
-        page.wait_for_timeout(1000)
+        for intento in range(1, 4):
+            try:
+                print(f"  descarga plan {i + 1}: intento {intento}")
+                if i or intento > 1:
+                    _abrir_lista_planes(page)
+                else:
+                    page.get_by_text("View & Edit Plans").first.click(timeout=30_000)
+                    page.wait_for_timeout(3000)
+                    esperar_carga(page)
+                page.get_by_text(patron).nth(i).click(timeout=30_000)
+                page.wait_for_timeout(2500)
+                esperar_carga(page)
+                page.get_by_text("Export as CSV").first.click(timeout=30_000)
+                page.wait_for_timeout(800)
+                page.get_by_text("Download All Rows").first.hover(timeout=30_000)
+                page.wait_for_timeout(800)
+                with page.expect_download(timeout=600_000) as dl:
+                    page.get_by_text("All Columns", exact=True).first.click(timeout=30_000)
+                destino = OUT / f"plan_{i + 1}_{dl.value.suggested_filename}"
+                dl.value.save_as(destino)
+                print(f"  descarga plan {i + 1}: OK -> {destino.name}")
+                break
+            except Exception as e:
+                print(f"  descarga plan {i + 1}: fallo intento {intento}: {str(e).splitlines()[0][:150]}")
+                try:
+                    dump_debug(page, f"descarga_plan{i + 1}_intento{intento}")
+                except Exception:
+                    pass
+                try:
+                    page.keyboard.press("Escape")
+                except Exception:
+                    pass
+                if intento == 3:
+                    raise
+        page.wait_for_timeout(1500)
 
 
 def main():
     OUT.mkdir(exist_ok=True)
+    if os.environ.get("F9_SOLO_BAJAR") == "1":
+        # Los planes ya estan creados: solo bajarlos y subirlos al tablero.
+        with sync_playwright() as p:
+            ctx, page = nueva_pagina(p)
+            login(page)
+            go_replenishment(page)
+            download_last_two(page)
+            ctx.close()
+        return
     with sync_playwright() as p:
         ctx, page = nueva_pagina(p)
         login(page)
