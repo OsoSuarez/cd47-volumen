@@ -516,6 +516,8 @@ table.cmp td.hi{color:var(--yellow2)}
       <span class="cap2" id="semCount"></span>
       <button class="btn" id="semCsv">Copiar tabla</button>
       <button class="btn y" id="semUp">Copiar Min/Max</button>
+      <button class="btn y" id="semCarga" title="Carga completa para el sistema: los SKUs aconsejados con su Min/Max y todo el resto de la V L en 0">Copiar carga completa</button>
+      <button class="btn" id="semCargaDl" title="La misma carga completa, en CSV">CSV carga completa</button>
       <button class="btn" id="semDl">Descargar CSV</button>
     </div>
     <div class="tbl" style="max-height:560px"><table id="semSku"></table></div>
@@ -2257,6 +2259,24 @@ function renderSim(){
 $('#semF').onchange=$('#semA').onchange=$('#semAr').onchange=()=>renderSemSku();
 $('#semMinD').oninput=$('#semMaxD').oninput=$('#semAprov').oninput=()=>renderSim();
 $('#semVer').onchange=()=>renderSim();
+// Carga completa: el sistema solo debe leer los SKUs que aconsejamos. Esos van con su
+// Min/Max (en RXX solo Min) y todos los demas SKUs de la V L van en 0, sin importar
+// los filtros de la tabla.
+function semCarga(){
+  const RX=MODELO==='RXX',en=new Set(),F=[];
+  for(const r of semR.sku){en.add(r.s);F.push([r.s,r.grp,Math.round(r.minP),RX?null:Math.round(r.maxP)])}
+  let ceros=0;
+  for(const [s,info] of mm.map){if(en.has(s))continue;F.push([s,info.grp||'',0,RX?null:0]);ceros++}
+  F.sort((a,b)=>a[0]-b[0]);
+  const H=RX?['SKU ID','Grupo','Min']:['SKU ID','Grupo','Min','Max'];
+  return {H,rows:F.map(r=>RX?r.slice(0,3):r),ceros,n:semR.sku.length}}
+$('#semCarga').onclick=()=>{if(!semR)return;const c=semCarga();
+  copy([c.H.join('\t')].concat(c.rows.map(r=>r.join('\t'))).join('\n'),`${nf.format(c.n)} SKUs con ${MODELO==='RXX'?'Min':'Min/Max'} + ${nf.format(c.ceros)} en 0 (${nf.format(c.rows.length)} filas)`)};
+$('#semCargaDl').onclick=()=>{if(!semR)return;const c=semCarga();
+  const csv='\ufeff'+[c.H.join(';')].concat(c.rows.map(r=>r.join(';'))).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`carga_${MODELO}_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(a.href);
+  toast(`${nf.format(c.n)} SKUs con valores + ${nf.format(c.ceros)} en 0 (${nf.format(c.rows.length)} filas)`)};
 function aplicarModeloUI(){
   const RX=MODELO==='RXX';
   $('#t4').classList.toggle('rxx',RX);
