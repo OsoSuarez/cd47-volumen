@@ -549,7 +549,7 @@ table.cmp td.hi{color:var(--yellow2)}
   <div class="panel">
     <div class="toolbar" style="margin-bottom:10px">
       <div class="ptitle" style="margin:0">Inventario y coordenadas · stock y % ocupación</div><span class="spacer"></span>
-      <a class="btn y" id="invRun" href="https://github.com/OsoSuarez/cd47-volumen/actions/workflows/actualizar.yml" target="_blank" rel="noopener" style="text-decoration:none">Actualizar desde GitHub ↗</a><span class="note" style="margin:0">Última actualización: <input type="date" id="invFecha" value="2026-11-04"></span>
+      <a class="btn y" id="invRun" href="https://github.com/OsoSuarez/cd47-volumen/actions/workflows/actualizar.yml" target="_blank" rel="noopener" style="text-decoration:none">Actualizar desde GitHub ↗</a><button class="btn" id="invRecalc" title="Vuelve a cargar lo último publicado (inventario, V L y plan) y recalcula todas las sugerencias. Usalo después de correr la actualización en GitHub.">Recalcular con lo último ↻</button><span class="note" style="margin:0">Última actualización: <input type="date" id="invFecha" value="2026-11-04"></span>
     </div>
     <div class="note" id="invStatus">Última corrida: <b>__RUN_AT__</b> (hora Buenos Aires). Se actualiza cada hora desde GitHub Actions. Para forzarla, tocá “Actualizar desde GitHub”.</div>
   </div>
@@ -2475,6 +2475,9 @@ $('#trvCopy').onclick=()=>{if(!trvRows.length)return;const R=trvR;
   copy(L.join('\n'),`${nf.format(trvRows.length)} SKUs copiados`)};
 renderPolicy();
 updFecha();
+// Recalcular con lo ultimo publicado: recarga sin cache y vuelve a la misma solapa.
+$('#invRecalc').onclick=()=>{try{sessionStorage.setItem('cd47_tab',(document.querySelector('.tabbtn.on')||{}).dataset.t||'t1')}catch(e){}location.href=location.pathname+'?v='+Date.now()};
+try{const tb=sessionStorage.getItem('cd47_tab');if(tb){sessionStorage.removeItem('cd47_tab');const bt=document.querySelector('.tabbtn[data-t="'+tb+'"]');if(bt)setTimeout(()=>bt.click(),0)}}catch(e){}
 recompute();
 })();
 </script>
