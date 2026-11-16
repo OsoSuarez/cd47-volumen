@@ -206,7 +206,7 @@ table.cmp td.hi{color:var(--yellow2)}
   </div>
 </header>
 
-<nav class="tabs"><div class="wrap tabsin"><button class="tabbtn on" data-t="t1">Volumen futuro</button><button class="tabbtn" data-t="t2">Min / Máx</button><button class="tabbtn" data-t="t3">Revisión masterdata</button><button class="tabbtn" data-t="t4">Reabasto semanal</button><button class="tabbtn" data-t="t5">Inventario / coordenadas</button><button class="tabbtn" data-t="t6">Reabasto diario</button></div></nav>
+<nav class="tabs"><div class="wrap tabsin"><button class="tabbtn on" data-t="t1">Volumen futuro</button><button class="tabbtn" data-t="t2">Min / Máx</button><button class="tabbtn" data-t="t3">Revisión masterdata</button><button class="tabbtn" data-t="t4">Reabasto semanal</button><button class="tabbtn" data-t="t5">Inventario / coordenadas</button><button class="tabbtn" data-t="t6">Reabasto diario</button><button class="tabbtn" data-t="t7">Revisión TR vs TR futura</button></div></nav>
 <div class="wrap" id="t1">
   <div class="panel">
     <div class="ptitle">Muelle de carga · archivos</div>
@@ -228,7 +228,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 18:30</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 19:00</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -547,6 +547,50 @@ table.cmp td.hi{color:var(--yellow2)}
   </div>
 </div>
 
+<div class="wrap" id="t7" style="display:none">
+  <div class="panel">
+    <div class="ptitle">Revisión TR vs TR futura · lo que salió contra lo que decía el plan</div>
+    <label class="drop" id="dropTRV">
+      <svg class="ico" viewBox="0 0 52 52"><rect x="6" y="14" width="40" height="32" rx="2" fill="#a87843" stroke="#7d5630" stroke-width="2"/><path d="M6 24h40M26 14v10" stroke="#7d5630" stroke-width="2"/><path d="M26 4v20m-7-7 7 7 7-7" stroke="#41b8a8" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
+      <div><b>Soltá acá el Excel de Detalle de TRs del día</b> o hacé clic para elegirlo
+        <small>Se compara por tienda × SKU el día de <b>FECHA CREADO</b> contra lo que decía el plan para ese día (Final Order Date). Los días que cargues quedan guardados en este navegador; podés ir sumando uno por día.</small></div>
+      <input type="file" id="fiTRV" accept=".xlsx,.xls,.csv" multiple hidden>
+    </label>
+    <div class="files" id="trvFiles"></div>
+    <div class="toolbar" style="margin-top:12px">
+      <label>Día</label><select id="trvDia"></select>
+      <label style="margin-left:8px">Plan de referencia</label><select id="trvPlan"></select>
+      <label style="margin-left:8px">Ejecutado</label><select id="trvQ"><option value="o">Q_Ordered (lo pedido en la TR)</option><option value="p">Q_Picked (lo pickeado)</option><option value="d">Q_Delivered (lo entregado)</option></select>
+      <span class="spacer"></span>
+      <button class="btn" id="trvBorrar">Borrar día</button>
+    </div>
+    <div class="note" id="trvNota"></div>
+  </div>
+  <div class="kpis" id="trvKpis"></div>
+  <div class="panel">
+    <div class="ptitle">Evolución por día</div>
+    <div class="tbl" style="max-height:360px"><table id="trvDias"></table></div>
+  </div>
+  <div class="panel">
+    <div class="ptitle">Por temperatura</div>
+    <div class="tbl" style="max-height:360px"><table id="trvTemp"></table></div>
+  </div>
+  <div class="panel">
+    <div class="ptitle">Por tienda</div>
+    <div class="tbl" style="max-height:420px"><table id="trvTienda"></table></div>
+  </div>
+  <div class="panel">
+    <div class="toolbar" style="margin-bottom:10px">
+      <div class="ptitle" style="margin:0">SKUs con más desvío</div><span class="spacer"></span>
+      <select id="trvF"><option value="all">Todos los desvíos</option><option value="sinplan">Salieron sin estar en el plan</option><option value="nosalio">Estaban en el plan y no salieron</option><option value="mas">Salió más que el plan</option><option value="menos">Salió menos que el plan</option></select>
+      <input type="search" id="trvQs" placeholder="Buscar SKU o nombre…">
+      <button class="btn y" id="trvCopy">Copiar tabla</button>
+    </div>
+    <div class="tbl" style="max-height:620px"><table id="trvSku"></table></div>
+    <div class="note" id="trvSkuNota"></div>
+  </div>
+</div>
+
 <script id="base" type="application/json">__BASE__</script>
 <script id="vlbase" type="application/json">__VL__</script>
 <script>
@@ -783,6 +827,7 @@ function recompute(){
   const partial=dT.map(x=>x.size<temps.length);
   agg={dates,whs:[...whs].sort((a,b)=>a-b),keys:merged.size,M,temps,partial,dT};
   renderFiles();renderWhSel();renderAll();renderMM();
+  try{trvPlanDesdeAgg()}catch(e){console.warn('trv',e)}
 }
 function build(wh,tp){
   const nD=agg.dates.length,M=agg.M;
@@ -1233,7 +1278,7 @@ $('#cUseSheet').onchange=()=>{capCfg.useSheet=$('#cUseSheet').checked;renderAll(
 $('#revQ').oninput=()=>renderRev();
 $('#revCopy').onclick=()=>{if(!revRows.length)return;const L=['SKU ID\tSKU Name\tGrupo\tTemp.\tBatch plan\tCant. empaque V L\tVolumen V L\tStock Min\tStock Max\tDemanda prom/día\tPico diario\tMotivo\tQué revisar'];revRows.forEach(r=>L.push([r.s,r.name,r.grp,r.temp,rn(r.pb),rn(r.ve),rn(r.vol),rn(r.min),rn(r.max),r.dem?dec(r.prom):'',r.dem?rn(r.pico):'',r.motivo,r.sug].join('\t')));copy(L.join('\n'),'Lista para revisar copiada')};
 $('#mmCopy').onclick=()=>{if(!mmRows.length)return;const L=['SKU ID\tSKU Name\tGrupo\tTemp.\tBatch\tCant. empaque\tMin actual\tMax actual\tDemanda prom/día\tPico diario\tHolgura\tDías sobre Max\tEstado\tPolítica\tMin propuesto\tMax propuesto\tMin = Max'];mmRows.forEach(r=>L.push([r.s,r.name,r.grp,r.temp,rn(r.batch),rn(r.emp),rn(r.min),rn(r.max),r.hasDem?dec(r.prom):'',r.hasDem?rn(r.pico):'',r.hasDem?rn(r.max-r.pico):'',r.hasDem?r.over:'',!r.hasDem?'Sin demanda':(r.pico>r.max?'Corto':'OK'),r.pol,rn(r.minP),rn(r.maxP),r.minEqMax?'Sí':''].join('\t')));copy(L.join('\n'),'Detalle Min/Máx copiado')};
-document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabbtn').forEach(x=>x.classList.toggle('on',x===b));['t1','t2','t3','t4','t5','t6'].forEach(id=>$('#'+id).style.display=id===b.dataset.t?'':'none');if(b.dataset.t==='t2')renderMM();if(b.dataset.t==='t3')renderRev();if(b.dataset.t==='t4')renderSim();if(b.dataset.t==='t5')renderInv();if(b.dataset.t==='t6')rbRender()});
+document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabbtn').forEach(x=>x.classList.toggle('on',x===b));['t1','t2','t3','t4','t5','t6','t7'].forEach(id=>$('#'+id).style.display=id===b.dataset.t?'':'none');if(b.dataset.t==='t2')renderMM();if(b.dataset.t==='t3')renderRev();if(b.dataset.t==='t4')renderSim();if(b.dataset.t==='t5')renderInv();if(b.dataset.t==='t6')rbRender();if(b.dataset.t==='t7')trvRender()});
 // V L precargada (CSV Inventarios Rappi-ID · V L)
 try{
   const V=JSON.parse($('#vlbase').textContent);const map=new Map();
@@ -2119,6 +2164,146 @@ $('#semDl').onclick=()=>{if(!semR)return;const L=semFiltrado();
   toast(`${nf.format(L.length)} SKUs descargados`)};
 $('#sPerS').oninput=$('#sProdS').oninput=$('#sHrS').oninput=$('#sPerF').oninput=$('#sProdF').oninput=$('#sHrF').oninput=$('#sGrow').oninput=()=>renderSim();
 $('#sFruver').onchange=()=>renderSim();
+
+// ================= Revisión TR vs TR futura =================
+// Guarda en IndexedDB: TRs ejecutadas por día (FECHA CREADO) y, por cada plan que se
+// carga, lo que ese plan decía para cada fecha. Así se puede comparar un día contra
+// el plan de ese mismo día o contra uno bajado días antes.
+var TRV_K='trv_v1';
+var trv={tr:{},plan:{},names:{}}; // tr[fecha]={file,at,rows:[w,s,o,p,d,...],meta:{s:[temp,transf]}}; plan[fecha]={inicio:[w,s,q,...]}
+var trvListo=false,trvPend=false;
+function trvGuardar(){return snapTx('readwrite',st=>st.put(trv,TRV_K)).catch(e=>console.warn('trv',e))}
+snapTx('readonly',st=>st.get(TRV_K)).then(v=>{if(v&&v.tr)trv=v;trvListo=true;if(trvPend)trvPlanDesdeAgg();trvRender()}).catch(()=>{trvListo=true});
+// Lo llama recompute: copia lo que el plan cargado dice para cada fecha.
+function trvPlanDesdeAgg(){
+  if(!trvListo){trvPend=true;return}
+  if(!agg||!agg.dates.length)return;
+  const ini=agg.dates[0],M=agg.M,porD=agg.dates.map(()=>[]);
+  for(let i=0;i<M.q.length;i++)porD[M.d[i]].push(M.w[i],M.s[i],M.q[i]);
+  let cambio=false;
+  agg.dates.forEach((d,j)=>{if(!porD[j].length)return;trv.plan[d]=trv.plan[d]||{};const prev=trv.plan[d][ini];
+    if(!prev||prev.length!==porD[j].length){trv.plan[d][ini]=porD[j];cambio=true}});
+  for(const s of agg.M.s){const k=skus.get(s);if(k&&k.name&&!trv.names[s]){trv.names[s]=k.name;cambio=true}}
+  // Se guardan 45 días para atrás como mucho.
+  const lim=new Date(Date.now()-45*864e5).toISOString().slice(0,10);
+  for(const d of Object.keys(trv.plan))if(d<lim){delete trv.plan[d];cambio=true}
+  for(const d of Object.keys(trv.tr))if(d<lim){delete trv.tr[d];cambio=true}
+  if(cambio)trvGuardar();
+  if($('#t7')&&$('#t7').style.display!=='none')trvRender();
+}
+function trvFecha(v){
+  if(v instanceof Date&&!isNaN(v))return new Date(v.getTime()-v.getTimezoneOffset()*6e4).toISOString().slice(0,10);
+  if(typeof v==='number'&&v>20000&&v<80000){const d=new Date(Math.round((v-25569)*864e5));return d.toISOString().slice(0,10)}
+  const t=String(v||'').trim();let m=t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  m=t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);if(m){const y=m[3].length===2?'20'+m[3]:m[3];return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`}
+  return null}
+async function trvLeer(file){
+  let rows;
+  if(/\.csv$/i.test(file.name)){const txt=await file.text();const sep=(txt.split('\n')[0].match(/;/g)||[]).length>(txt.split('\n')[0].match(/,/g)||[]).length?';':',';
+    rows=txt.split(/\r?\n/).filter(x=>x.trim()).map(l=>l.split(sep).map(c=>c.replace(/^"|"$/g,'')))}
+  else{await loadSheetJS();const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
+    rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''})}
+  const hi=rows.findIndex(r=>r.some(c=>/sync_?id/i.test(String(c))));if(hi<0)throw new Error('No encontré la columna sync_Id');
+  const H=rows[hi].map(c=>String(c).trim().toLowerCase());
+  const col=(...ns)=>{for(const n of ns){const i=H.findIndex(h=>h===n.toLowerCase());if(i>=0)return i}for(const n of ns){const i=H.findIndex(h=>h.includes(n.toLowerCase()));if(i>=0)return i}return -1};
+  const c={w:col('Warehouse_Destino_Id','warehouse destino','destino'),s:col('sync_Id'),o:col('Q_Ordered'),p:col('Q_Picked'),d:col('Q_Delivered'),f:col('FECHA CREADO','fecha creacion','created'),
+    n:col('Producto','producto'),t:col('Temperatura'),x:col('Transferencia')};
+  for(const k of ['w','s','o','f'])if(c[k]<0)throw new Error('Falta la columna '+{w:'Warehouse_Destino_Id',s:'sync_Id',o:'Q_Ordered',f:'FECHA CREADO'}[k]);
+  const porDia={};let filas=0;
+  for(let i=hi+1;i<rows.length;i++){const r=rows[i];const s=+r[c.s],w=+r[c.w];if(!s||!w)continue;const f=trvFecha(r[c.f]);if(!f)continue;
+    const D=porDia[f]=porDia[f]||{m:new Map(),meta:{}};const k=w+'|'+s;const a=D.m.get(k)||[0,0,0];
+    a[0]+=+r[c.o]||0;a[1]+=c.p>=0?(+r[c.p]||0):0;a[2]+=c.d>=0?(+r[c.d]||0):0;D.m.set(k,a);filas++;
+    if(c.n>=0&&r[c.n]&&!trv.names[s])trv.names[s]=String(r[c.n]);
+    if(!D.meta[s])D.meta[s]=[c.t>=0?String(r[c.t]):'',c.x>=0?String(r[c.x]):'']}
+  if(!filas)throw new Error('No encontré filas con fecha y SKU');
+  for(const [f,D] of Object.entries(porDia)){const flat=[];for(const [k,a] of D.m){const [w,s]=k.split('|');flat.push(+w,+s,a[0],a[1],a[2])}
+    trv.tr[f]={file:file.name,at:Date.now(),rows:flat,meta:D.meta}}
+  return Object.keys(porDia).sort();
+}
+async function trvAgregar(list){
+  const el=$('#trvNota');
+  for(const file of list){el.textContent='Leyendo '+file.name+'…';
+    try{const ds=await trvLeer(file);trvSel=ds.at(-1);el.textContent='';toast(`${file.name}: ${ds.length} día${ds.length>1?'s':''} cargado${ds.length>1?'s':''}`)}
+    catch(e){el.innerHTML=`<span style="color:#ff9d97">⚠ ${esc(file.name)}: ${esc(e.message)}</span>`}}
+  await trvGuardar();trvRender();
+}
+var trvSel=null,trvRows=[];
+const trvDrop=$('#dropTRV'),trvFi=$('#fiTRV');
+trvFi.onchange=()=>{trvAgregar([...trvFi.files]);trvFi.value=''};
+['dragenter','dragover'].forEach(ev=>trvDrop.addEventListener(ev,e=>{e.preventDefault();trvDrop.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>trvDrop.addEventListener(ev,e=>{e.preventDefault();trvDrop.classList.remove('over')}));
+trvDrop.addEventListener('drop',e=>trvAgregar([...e.dataTransfer.files]));
+$('#trvDia').onchange=e=>{trvSel=e.target.value;trvRender()};
+$('#trvPlan').onchange=$('#trvQ').onchange=$('#trvF').onchange=()=>trvRender();
+let trvQt;$('#trvQs').oninput=()=>{clearTimeout(trvQt);trvQt=setTimeout(trvSkuTbl,150)};
+$('#trvBorrar').onclick=async()=>{if(!trvSel||!trv.tr[trvSel])return;delete trv.tr[trvSel];trvSel=null;await trvGuardar();trvRender();toast('Día borrado')};
+function trvPlanes(d){const v=trv.plan[d]||{};return Object.keys(v).sort()}
+// Compara un día. ref = fecha de inicio del plan usado; qi = 0 ordered, 1 picked, 2 delivered.
+function trvComparar(d,ref,qi){
+  const T=trv.tr[d],P=(trv.plan[d]||{})[ref];if(!T||!P)return null;
+  const m=new Map();
+  for(let i=0;i<P.length;i+=3){const k=P[i]+'|'+P[i+1];m.set(k,{w:P[i],s:P[i+1],pl:P[i+2],ej:0})}
+  for(let i=0;i<T.rows.length;i+=5){const k=T.rows[i]+'|'+T.rows[i+1];const e=T.rows[i+2+qi];let r=m.get(k);if(!r){r={w:T.rows[i],s:T.rows[i+1],pl:0,ej:0};m.set(k,r)}r.ej+=e}
+  const temp=s=>(T.meta[s]&&T.meta[s][0])||(skus.get(+s)?.temp)||'Sin dato';
+  const R={tPl:0,tEj:0,uPl:0,uEj:0,ambas:0,sinPlan:0,noSalio:0,absDif:0,rows:[...m.values()],temp};
+  for(const r of R.rows){const p=r.pl>0,e=r.ej>0;if(p)R.tPl++;if(e)R.tEj++;if(p&&e)R.ambas++;else if(e)R.sinPlan++;else if(p)R.noSalio++;R.uPl+=r.pl;R.uEj+=r.ej;R.absDif+=Math.abs(r.ej-r.pl)}
+  return R}
+const trvPct=(a,b)=>b?nf1.format(a/b*100)+'%':'—';
+const trvDifPct=(e,p)=>{if(!p)return e?'<span style="color:#ffd34d">nuevo</span>':'—';const v=(e/p-1)*100;const c=Math.abs(v)<=5?'#9fe0a8':Math.abs(v)<=15?'#ffd34d':'#ff9d97';return `<span style="color:${c};font-weight:600">${v>0?'+':''}${nf1.format(v)}%</span>`};
+function trvRender(){
+  if(!$('#trvDia'))return;
+  const dias=Object.keys(trv.tr).sort();
+  $('#trvFiles').innerHTML=dias.map(d=>{const T=trv.tr[d];const n=T.rows.length/5;const tienePlan=trvPlanes(d).length>0;
+    return `<div class="chip ${tienePlan?'':'err'}"><div style="font-size:20px">🚚</div><div><div class="n">${fmtD(d,true)} · ${esc(T.file)}</div><div class="m">${nf.format(n)} tareas (tienda × SKU) · ${tienePlan?'<span class="tag">con plan para comparar</span>':'sin plan guardado para ese día: cargá un plan que lo incluya'}</div></div><span></span></div>`}).join('')||'<div class="empty">Todavía no cargaste ningún Excel de TRs.</div>';
+  if(!trvSel||!trv.tr[trvSel])trvSel=dias.at(-1)||null;
+  $('#trvDia').innerHTML=dias.map(d=>`<option value="${d}">${fmtD(d,true)}</option>`).join('');if(trvSel)$('#trvDia').value=trvSel;
+  const pls=trvSel?trvPlanes(trvSel):[];const prevPl=$('#trvPlan').value;
+  $('#trvPlan').innerHTML=pls.map(ini=>{const dd=Math.round((new Date(trvSel)-new Date(ini))/864e5);return `<option value="${ini}">Plan bajado el ${fmtD(ini)}${dd===0?' (el mismo día)':` (${dd} día${dd>1?'s':''} antes)`}</option>`}).reverse().join('');
+  if(pls.includes(prevPl))$('#trvPlan').value=prevPl;
+  const qi={o:0,p:1,d:2}[$('#trvQ').value]||0;
+  // Evolución: cada día contra el plan más reciente que lo tenga.
+  let hd='<thead><tr><th class="l">Día</th><th class="l">Plan usado</th><th>Tareas plan</th><th>Tareas TR</th><th>Dif.</th><th>Unidades plan</th><th>Unidades TR</th><th>Dif.</th><th>Coincidencia</th><th>Precisión</th></tr></thead><tbody>';
+  for(const d of [...dias].reverse()){const pl=trvPlanes(d);if(!pl.length){hd+=`<tr><td class="l">${fmtD(d,true)}</td><td class="l" colspan="9" style="color:#7f8994">Sin plan guardado para ese día</td></tr>`;continue}
+    const ref=d===trvSel&&$('#trvPlan').value?$('#trvPlan').value:pl.at(-1);const R=trvComparar(d,ref,qi);
+    hd+=`<tr${d===trvSel?' style="background:#232830"':''}><td class="l">${fmtD(d,true)}</td><td class="l">${fmtD(ref)}</td><td>${nf.format(R.tPl)}</td><td>${nf.format(R.tEj)}</td><td>${trvDifPct(R.tEj,R.tPl)}</td><td>${nf.format(Math.round(R.uPl))}</td><td>${nf.format(Math.round(R.uEj))}</td><td>${trvDifPct(R.uEj,R.uPl)}</td><td>${trvPct(R.ambas,R.tPl)}</td><td>${R.uPl?nf1.format(Math.max(0,1-R.absDif/R.uPl)*100)+'%':'—'}</td></tr>`}
+  $('#trvDias').innerHTML=dias.length?hd+'</tbody>':'';
+  const K=$('#trvKpis');const R=trvSel&&$('#trvPlan').value?trvComparar(trvSel,$('#trvPlan').value,qi):null;trvR=R;
+  if(!R){K.innerHTML='';['#trvTemp','#trvTienda','#trvSku'].forEach(x=>$(x).innerHTML='');
+    $('#trvNota').innerHTML=dias.length&&trvSel?'Para comparar este día hace falta un plan que lo incluya. El tablero guarda solo los planes que se cargan desde ahora; para días viejos, soltá el plan de ese día en la solapa Volumen futuro.':'';return}
+  $('#trvNota').innerHTML=`Se compara <b>${fmtD(trvSel,true)}</b> (FECHA CREADO de las TR) contra el plan bajado el <b>${fmtD($('#trvPlan').value)}</b> para ese día. <b>Coincidencia</b> = tareas del plan que también salieron en una TR. <b>Precisión</b> = 1 − Σ|TR − plan| / Σ plan, en unidades.`;
+  const k=(l,v,s)=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+  K.innerHTML=k('Tareas plan → TR',`${nf.format(R.tPl)} → ${nf.format(R.tEj)}`,`Diferencia ${trvDifPct(R.tEj,R.tPl)}`)+
+    k('Unidades plan → TR',`${nf.format(Math.round(R.uPl))} → ${nf.format(Math.round(R.uEj))}`,`Diferencia ${trvDifPct(R.uEj,R.uPl)}`)+
+    k('Coincidencia de tareas',trvPct(R.ambas,R.tPl),`${nf.format(R.ambas)} tareas del plan salieron`)+
+    k('Salieron sin plan',nf.format(R.sinPlan),`${trvPct(R.sinPlan,R.tEj)} de las tareas de TR`)+
+    k('Plan que no salió',nf.format(R.noSalio),`${trvPct(R.noSalio,R.tPl)} de las tareas del plan`);
+  // Por temperatura y por tienda
+  const grupo=(fk)=>{const g=new Map();for(const r of R.rows){const key=fk(r);let a=g.get(key);if(!a){a={tPl:0,tEj:0,uPl:0,uEj:0,ambas:0};g.set(key,a)}if(r.pl>0)a.tPl++;if(r.ej>0)a.tEj++;if(r.pl>0&&r.ej>0)a.ambas++;a.uPl+=r.pl;a.uEj+=r.ej}return [...g.entries()].sort((a,b)=>b[1].tPl+b[1].tEj-a[1].tPl-a[1].tEj)};
+  const tblG=(sel,titulo,lista,fmtK)=>{let h=`<thead><tr><th class="l">${titulo}</th><th>Tareas plan</th><th>Tareas TR</th><th>Dif.</th><th>Unidades plan</th><th>Unidades TR</th><th>Dif.</th><th>Coincidencia</th></tr></thead><tbody>`;
+    for(const [key,a] of lista)h+=`<tr><td class="l">${fmtK(key)}</td><td>${nf.format(a.tPl)}</td><td>${nf.format(a.tEj)}</td><td>${trvDifPct(a.tEj,a.tPl)}</td><td>${nf.format(Math.round(a.uPl))}</td><td>${nf.format(Math.round(a.uEj))}</td><td>${trvDifPct(a.uEj,a.uPl)}</td><td>${trvPct(a.ambas,a.tPl)}</td></tr>`;
+    $(sel).innerHTML=h+'</tbody>'};
+  tblG('#trvTemp','Temperatura',grupo(r=>R.temp(r.s)),x=>esc(x));
+  tblG('#trvTienda','Tienda',grupo(r=>r.w),x=>'Tienda '+x);
+  trvSkuTbl();
+}
+var trvR=null;
+function trvSkuTbl(){
+  const R=trvR;if(!R){$('#trvSku').innerHTML='';return}
+  const g=new Map();for(const r of R.rows){let a=g.get(r.s);if(!a){a={s:r.s,pl:0,ej:0,tPl:0,tEj:0};g.set(r.s,a)}a.pl+=r.pl;a.ej+=r.ej;if(r.pl>0)a.tPl++;if(r.ej>0)a.tEj++}
+  const f=$('#trvF').value,qq=($('#trvQs').value||'').toLowerCase();
+  let L=[...g.values()].filter(a=>a.pl!==a.ej);
+  if(f==='sinplan')L=L.filter(a=>!a.pl&&a.ej);else if(f==='nosalio')L=L.filter(a=>a.pl&&!a.ej);else if(f==='mas')L=L.filter(a=>a.ej>a.pl);else if(f==='menos')L=L.filter(a=>a.ej<a.pl);
+  if(qq)L=L.filter(a=>String(a.s).includes(qq)||(trv.names[a.s]||'').toLowerCase().includes(qq));
+  L.sort((a,b)=>Math.abs(b.ej-b.pl)-Math.abs(a.ej-a.pl));trvRows=L;
+  let h='<thead><tr><th class="l">SKU ID</th><th class="l">Producto</th><th class="l">Temperatura</th><th>Tiendas plan</th><th>Tiendas TR</th><th>Unidades plan</th><th>Unidades TR</th><th>Diferencia</th><th>Dif. %</th></tr></thead><tbody>';
+  for(const a of L.slice(0,300))h+=`<tr><td class="l mono">${a.s}</td><td class="l nm" title="${esc(trv.names[a.s]||'')}">${esc(trv.names[a.s]||'')}</td><td class="tc">${esc(R.temp(a.s))}</td><td>${nf.format(a.tPl)}</td><td>${nf.format(a.tEj)}</td><td>${nf.format(Math.round(a.pl))}</td><td>${nf.format(Math.round(a.ej))}</td><td style="color:${a.ej>a.pl?'#ffd34d':'#8ec5ff'}">${a.ej>a.pl?'+':''}${nf.format(Math.round(a.ej-a.pl))}</td><td>${trvDifPct(a.ej,a.pl)}</td></tr>`;
+  $('#trvSku').innerHTML=h+'</tbody>';
+  $('#trvSkuNota').textContent=L.length>300?`Se muestran los 300 SKUs con más desvío de ${nf.format(L.length)}. "Copiar tabla" copia todos.`:`${nf.format(L.length)} SKUs con desvío.`;
+}
+$('#trvCopy').onclick=()=>{if(!trvRows.length)return;const R=trvR;
+  const L=['SKU ID\tProducto\tTemperatura\tTiendas plan\tTiendas TR\tUnidades plan\tUnidades TR\tDiferencia'];
+  for(const a of trvRows)L.push([a.s,limpio(trv.names[a.s]||''),limpio(R.temp(a.s)),a.tPl,a.tEj,Math.round(a.pl),Math.round(a.ej),Math.round(a.ej-a.pl)].join('\t'));
+  copy(L.join('\n'),`${nf.format(trvRows.length)} SKUs copiados`)};
 renderPolicy();
 updFecha();
 recompute();
