@@ -228,7 +228,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-12 11:30</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 17:30</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -519,7 +519,7 @@ table.cmp td.hi{color:var(--yellow2)}
   <div class="panel">
     <div class="ptitle" style="margin-bottom:8px">Capacidad cúbica de las ubicaciones de picking</div>
     <div class="note" style="margin-top:0">Ubicaciones de Piso 1 por grupo y cuántas tienen cargada la capacidad cúbica real en CORDENADAS. El valor 1000 de la planilla es un valor por defecto y cuenta como sin dato. Donde falta, Reabasto semanal no puede verificar que el Max entre físicamente.</div>
-    <div class="tbl" style="max-height:520px"><table id="capTbl"></table></div>
+    <div class="tbl" style="max-height:520px"><table id="capGTbl"></table></div>
   </div>
 </div>
 
@@ -833,15 +833,31 @@ function tLabel(){return 'Tareas'}
 const CAP_SHEET={"2026-11-03": 11700, "2026-11-04": 11700, "2026-11-05": 11700, "2026-11-06": 11700, "2026-11-07": 11700, "2026-11-08": 0, "2026-11-09": 10200, "2026-11-10": 11700, "2026-11-11": 11700, "2026-11-12": 11700};
 const PERS={"2026-11-03": 28, "2026-11-04": 28, "2026-11-05": 28, "2026-11-06": 28, "2026-11-07": 28, "2026-11-08": 0, "2026-11-09": 25, "2026-11-10": 28, "2026-11-11": 28, "2026-11-12": 28};
 const capCfg={prod:65,hh:6.5,useSheet:true};
-function capFor(d){if(capCfg.useSheet)return CAP_SHEET[d]??null;const p=PERS[d];return p==null?null:p*capCfg.prod*capCfg.hh}
+// Personal cargado a mano por fecha (queda guardado en este navegador).
+let PERS_U={};try{PERS_U=JSON.parse(localStorage.getItem('cd47_pers')||'{}')||{}}catch(e){PERS_U={}}
+function guardarPers(){try{localStorage.setItem('cd47_pers',JSON.stringify(PERS_U))}catch(e){}}
+// Personal de un día: lo que cargaste > el del sheet > el del mismo día de la semana más reciente que haya.
+function persFor(d){
+  if(PERS_U[d]!=null)return PERS_U[d];
+  if(PERS[d]!=null)return PERS[d];
+  const dow=new Date(d+'T12:00:00').getDay();
+  const ref=[...Object.keys(PERS_U),...Object.keys(PERS)].filter(k=>new Date(k+'T12:00:00').getDay()===dow).sort();
+  for(let i=ref.length-1;i>=0;i--){const k=ref[i];const v=PERS_U[k]??PERS[k];if(v!=null)return v}
+  return null}
+function capCalc(d){const p=persFor(d);return p==null?null:p*capCfg.prod*capCfg.hh}
+function capFor(d){if(capCfg.useSheet&&CAP_SHEET[d]!=null)return CAP_SHEET[d];return capCalc(d)}
 function renderCapTbl(){
-  const days=Object.keys(CAP_SHEET);const lab=d=>d.split('-')[2]+'/'+d.split('-')[1];
+  // Las columnas son las fechas del plan cargado: si cambia el plan, cambian solas.
+  const days=agg?.dates?.length?agg.dates:Object.keys(CAP_SHEET);const lab=d=>fmtD(d);
   let h='<thead><tr><th class="l">Día</th>'+days.map(d=>`<th>${lab(d)}</th>`).join('')+'</tr></thead><tbody>';
-  h+='<tr><td class="l">Personal</td>'+days.map(d=>`<td><input type="number" data-pers="${d}" value="${PERS[d]??''}" min="0" step="1" style="width:64px"></td>`).join('')+'</tr>';
-  h+='<tr><td class="l">Capacidad sheet</td>'+days.map(d=>`<td>${nf.format(CAP_SHEET[d])}</td>`).join('')+'</tr>';
-  h+='<tr><td class="l">Calculada (personal × prod. × HH)</td>'+days.map(d=>{const p=PERS[d];return `<td>${p==null?'—':nf.format(Math.round(p*capCfg.prod*capCfg.hh))}</td>`}).join('')+'</tr>';
+  h+='<tr><td class="l">Personal</td>'+days.map(d=>{const v=persFor(d);const est=PERS_U[d]==null&&PERS[d]==null;return `<td><input type="number" data-pers="${d}" value="${v??''}" min="0" step="1" style="width:64px${est?';color:#8ec5ff':''}" title="${est?'Estimado con el mismo día de la semana anterior. Cambialo si hace falta.':''}"></td>`}).join('')+'</tr>';
+  h+='<tr><td class="l">Capacidad sheet</td>'+days.map(d=>`<td>${CAP_SHEET[d]!=null?nf.format(CAP_SHEET[d]):'<span style="color:#7f8994">—</span>'}</td>`).join('')+'</tr>';
+  h+='<tr><td class="l">Calculada (personal × prod. × HH)</td>'+days.map(d=>{const c=capCalc(d);return `<td>${c==null?'—':nf.format(Math.round(c))}</td>`}).join('')+'</tr>';
   h+='<tr><td class="l"><b>Usada en la gráfica</b></td>'+days.map(d=>{const c=capFor(d);return `<td><b>${c==null?'—':nf.format(Math.round(c))}</b></td>`}).join('')+'</tr></tbody>';
   $('#capTbl').innerHTML=h;
+  const sinSheet=days.filter(d=>CAP_SHEET[d]==null).length;
+  let n=$('#capNote');if(!n){n=document.createElement('div');n.id='capNote';n.className='note';$('#capTbl').parentElement.after(n)}
+  n.innerHTML=sinSheet?`${sinSheet} de ${days.length} días del plan no están en el sheet de capacidad: para esos se usa personal × productividad × horas. El personal en <span style="color:#8ec5ff">celeste</span> es estimado con el mismo día de la semana anterior; lo que cambies queda guardado en este navegador.`:'';
 }
 function renderAll(){
   const D=agg.dates;curA=D.length?build(whSel,tpSel):null;const A=curA;
@@ -889,7 +905,7 @@ function bars(sel,D,V,color,unit,capRef){
        `<text x="${W-mr-6}" y="${ya-6}" fill="#eceff2" font-size="11" font-weight="600" text-anchor="end">${lbl}</text>`}
   svg.innerHTML=g;
   svg.querySelectorAll('.hit').forEach(r=>{
-    r.onmousemove=e=>{const i=+r.dataset.i;tip.style.display='block';tip.innerHTML=`${fmtD(D[i],true)}${curA?.estDay[i]?' · incluye estimado':agg.partial[i]?' ⚠ incompleto':''}<br><b>${nf.format(Math.round(V[i]))}</b> ${unit}`+(avg>0?`<br><span style="color:#7f8994">vs prom. semanal</span> <b>${V[i]>=avg?'+':''}${nf1.format((V[i]/avg-1)*100)}%</b>`:'')+(capRef&&capRef[i]!=null?`<br><span style="color:#7f8994">Capacidad</span> <b>${nf.format(capRef[i])}</b><br><span style="color:${V[i]>capRef[i]?'#ff9d97':'#9fe0a8'}">${V[i]>capRef[i]?'Excede por ':'Sobra '}${nf.format(Math.abs(Math.round(V[i]-capRef[i])))}</span>`:'');const bb=box.getBoundingClientRect();let lx=e.clientX-bb.left+12;if(lx>bb.width-150)lx-=170;tip.style.left=lx+'px';tip.style.top=(e.clientY-bb.top-10)+'px';r.setAttribute('fill','#ffffff0d')};
+    r.onmousemove=e=>{const i=+r.dataset.i;tip.style.display='block';tip.innerHTML=`${fmtD(D[i],true)}${curA?.estDay[i]?' · incluye estimado':agg.partial[i]?' ⚠ incompleto':''}<br><b>${nf.format(Math.round(V[i]))}</b> ${unit}`+(avg>0?`<br><span style="color:#7f8994">vs prom. semanal</span> <b>${V[i]>=avg?'+':''}${nf1.format((V[i]/avg-1)*100)}%</b>`:'')+(capRef&&capRef[i]!=null?(()=>{const n=V[i],c=capRef[i];if(!c)return `<br><span style="color:#7f8994">Necesidad</span> <b>${nf.format(Math.round(n))}</b> · <span style="color:#7f8994">Capacidad</span> <b>0</b><br><span style="color:#ff9d97;font-weight:700">✗ Fuera de capacidad</span>`;const u=n/c,dentro=n<=c;return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #2e353e"><span style="color:#7f8994">Necesidad</span> <b>${nf.format(Math.round(n))}</b><br><span style="color:#7f8994">Capacidad</span> <b>${nf.format(Math.round(c))}</b><br><span style="color:${dentro?'#9fe0a8':'#ff9d97'};font-weight:700">${dentro?'✓ Dentro':'✗ Fuera'} · usa ${nf1.format(u*100)}%</span><br><span style="color:${dentro?'#9fe0a8':'#ff9d97'}">${dentro?'Sobra':'Excede'} ${nf.format(Math.abs(Math.round(n-c)))} (${nf1.format(Math.abs(u-1)*100)}%)</span></div>`})():'');const bb=box.getBoundingClientRect();let lx=e.clientX-bb.left+12;if(lx>bb.width-150)lx-=170;tip.style.left=lx+'px';tip.style.top=(e.clientY-bb.top-10)+'px';r.setAttribute('fill','#ffffff0d')};
     r.onmouseleave=()=>{tip.style.display='none';r.setAttribute('fill','transparent')};
   });
 }
@@ -1196,7 +1212,7 @@ $('#areaBox').onclick=e=>{const a=e.target.dataset.heredar;if(!a)return;for(cons
 $('#grpBox').oninput=e=>{const k=e.target.dataset.gdoi;if(!k)return;const v=parseFloat(e.target.value);if(v>0)DOI_GRP[k]=v;else delete DOI_GRP[k];refreshApl();renderMM();renderSim()};
 $('#grpBox').onchange=e=>{const k=e.target.dataset.garea;if(!k)return;GROUPS[k].area=e.target.value;renderPolicy();renderMM();renderSim()};
 $('#mmFlujo').onchange=()=>{mmShow=300;renderMM()};
-$('#capTbl').onchange=e=>{const d=e.target.dataset.pers;if(!d)return;const v=parseFloat(e.target.value);PERS[d]=isNaN(v)?null:v;renderAll()};
+$('#capTbl').onchange=e=>{const d=e.target.dataset.pers;if(!d)return;const v=parseFloat(e.target.value);if(isNaN(v))delete PERS_U[d];else PERS_U[d]=v;guardarPers();renderAll()};
 $('#cProd').oninput=()=>{capCfg.prod=parseFloat($('#cProd').value)||0;renderAll()};
 $('#cHH').oninput=()=>{capCfg.hh=parseFloat($('#cHH').value)||0;renderAll()};
 $('#cUseSheet').onchange=()=>{capCfg.useSheet=$('#cUseSheet').checked;renderAll()};
@@ -1311,7 +1327,7 @@ function updFecha(){
   const st=$('#invFecha');
 }
 function renderCapG(){
-  const T=$('#capTbl');if(!T)return;
+  const T=$('#capGTbl');if(!T)return;
   const ks=Object.keys(CAPG).sort((a,b)=>CAPG[b][0]-CAPG[a][0]);
   if(!ks.length){T.innerHTML='<tr><td class="empty">Sin datos de CORDENADAS en esta corrida.</td></tr>';return}
   let tn=0,tr=0;
