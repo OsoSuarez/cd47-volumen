@@ -508,14 +508,14 @@ table.cmp td.hi{color:var(--yellow2)}
       <label title="Qué parte del volumen de la ubicación se puede llenar en la práctica con cajas o unidades.">Aprovechamiento <input type="number" id="semAprov" value="85" min="10" max="100" step="5" style="width:64px"> %</label>
       <label title="Cuántos días de demanda debe cubrir el Min. El Min es el punto de disparo del reabasto, no un stock de seguridad: cubre lo que se consume mientras llega la reposición.">Min cubre <input type="number" id="semMinD" value="0.5" min="0" step="0.25" style="width:70px"> días de pico</label>
       <label title="Tope del ciclo por SKU, en días de demanda promedio. En frío el tope es 5 días.">Ciclo hasta <input type="number" id="semMaxD" value="14" min="1" step="1" style="width:70px"> días</label>
-      <label>Acción <select id="semA"><option value="acc">Sólo las que requieren acción</option><option value="all">Todas</option><option value="Corregir">Corregir</option><option value="Subir">Subir</option><option value="Bajar">Bajar</option><option value="OK">OK</option><option value="corto">Max corto: no cubre 1 día de demanda</option><option value="cortoPico">Max corto: no cubre el pico diario</option><option value="minmax">Min igual o mayor que el Max</option></select></label>
+      <label>Acción <select id="semA"><option value="acc">Sólo las que requieren acción</option><option value="all">Todas</option><option value="cero">Poner en 0 (resto de la V L)</option><option value="Corregir">Corregir</option><option value="Subir">Subir</option><option value="Bajar">Bajar</option><option value="OK">OK</option><option value="corto">Max corto: no cubre 1 día de demanda</option><option value="cortoPico">Max corto: no cubre el pico diario</option><option value="minmax">Min igual o mayor que el Max</option></select></label>
       <label>Grupo <select id="semF"><option value="all">Todos</option></select></label>
       <label>Área <select id="semAr"><option value="all">Todas</option></select></label>
       <input type="search" id="semQ" placeholder="Buscar SKU o nombre..">
       <span class="spacer"></span>
       <span class="cap2" id="semCount"></span>
       <button class="btn" id="semCsv">Copiar tabla</button>
-      <button class="btn y" id="semUp">Copiar Min/Max</button>
+      <button class="btn y" id="semUp">Copiar Min/Max</button><button class="btn y" id="semCop" title="Todos los SKUs de la V L: los aconsejados con su Min y Max, el resto en 0 y 0">Copiar para Copérnico</button><button class="btn" id="semCopCsv">CSV Copérnico</button>
       <button class="btn y" id="semCarga" title="Carga completa para el sistema: los SKUs aconsejados con su Min/Max y todo el resto de la V L en 0">Copiar carga completa</button>
       <button class="btn" id="semCargaDl" title="La misma carga completa, en CSV">CSV carga completa</button>
       <button class="btn" id="semDl">Descargar CSV</button>
@@ -1987,6 +1987,16 @@ function semCalc(C){
   const ord={Corregir:0,Subir:1,Bajar:2,OK:3};
   sku.sort((x,y)=>ord[x.acc]-ord[y.acc]||((y.reabAct??0)-y.reabProp)-((x.reabAct??0)-x.reabProp));
 
+  // RXM: Copernico solo debe leer los SKUs aconsejados. El resto de la V L va en Min 0 / Max 0.
+  const advS=new Set(sku.map(x=>x.s)),resto=[];
+  if(!RX)for(const [s,info] of mm.map){
+    if(advS.has(s))continue;
+    const sk0=skus.get(s)||{},gi=GROUPS[String(info.grp||'').toUpperCase()]||{},necesita=(info.min>0||info.max>0);
+    resto.push({s,name:sk0.name||info.name||'',grp:info.grp,area:gi.area||'SIN ÁREA',flujo:gi.flujo||'—',temp:sk0.temp||'Sin dato',batch:(sk0.batch>0)?sk0.batch:info.emp,
+      prom:0,pico:0,minAct:info.min,maxAct:info.max,minP:0,maxP:0,minT:0,diasMin:null,maxFis:null,fisEst:false,entra:'',extra:0,faltaAlm:0,reabAct:0,reabProp:0,
+      acc:necesita?'Poner en 0':'OK',motivo:necesita?'No lo aconsejamos (sin demanda en el plan): Min 0 y Max 0 para que Copérnico no lo lea':'Sin demanda en el plan: ya está en 0 / 0',
+      dMin:-(info.min||0),dMax:-(info.max||0),libera:0,resto:true});
+  }
   // Prueba en el simulador diario: la misma cola, con los Min/Max de hoy y con los propuestos
   const sinCiclo=new Set(sku.filter(x=>x.reabAct==null).map(x=>x.s));
   const resumen=(S,aparte)=>{let ej=0,ejAparte=0,falt=0;
@@ -2006,7 +2016,7 @@ function semCalc(C){
   const trProp=RX?null:transRun(C,(s,info)=>minTm.has(s)?minTm.get(s):(isNaN(info.min)?0:info.min));
   return {G:lista,sku,capSem:{secos:C.capS*nD,frio:C.capF*nD},tot,totAct,nD,simHoy,simProp,trHoy,trProp,v2:V2,
     conFis:sku.filter(x=>x.maxFis!=null).length,noEntra:sku.filter(x=>x.maxFis!=null&&(x.maxAct||0)>x.maxFis).length,
-    reabRaw:lista.reduce((a,g)=>a+(g.reabRaw||0),0),opt,spOut:SP.out,faltaAlm,uFaltaAlm,modelo:MODELO};
+    reabRaw:lista.reduce((a,g)=>a+(g.reabRaw||0),0),opt,spOut:SP.out,faltaAlm,uFaltaAlm,modelo:MODELO,resto};
 }
 
 // Logica de reabasto de hoy: si el stock de picking no alcanza para la demanda del dia,
@@ -2085,6 +2095,7 @@ function renderSem(C){
   const peor=P.cola>H.cola||P.falt>H.falt*1.05||propT>actT;
   const fila=(n,x,extra)=>`<tr><td class="l">${n}</td><td>${nf.format(x.ej)}${extra||''}</td><td>${nf.format(x.cola)}</td><td>${x.dias} de ${R.nD}</td><td>${nf.format(Math.round(x.falt))}</td></tr>`;
   W.innerHTML=
+    (!RXm&&R.resto?`<div class="warn" style="border-color:#4a3a7a;background:#1c1830;color:#c9b8ff"><b>Para Copérnico (RXM):</b> se cargan solo los <b>${nf.format(R.sku.length)} SKUs aconsejados</b> con su Min y Max. Los otros <b>${nf.format(R.resto.length)} SKUs</b> de la V L van en <b>Min 0 / Max 0</b> (${nf.format(R.resto.filter(r=>r.acc==='Poner en 0').length)} tienen hoy algún valor y hay que ponerlos en cero). Usá “Copiar para Copérnico”.</div>`:'')+
     (peor?`<div class="warn" style="border-color:#5a2a2a;background:#2a1818"><b>⚠ No cargar esta propuesta.</b> En el simulador diario sale peor que la configuración de hoy${P.cola>H.cola?': deja más cola':''}${P.falt>H.falt*1.05?', más faltante en picking':''}${propT>actT?', y genera más reabastos':''}. Probá con otro valor de “Min cubre”.</div>`
          :`<div class="warn" style="border-color:#24502f;background:#16241b;color:#9fe0a8">✔ La propuesta pasa la prueba del simulador diario: no deja más cola ni más faltante que la configuración de hoy.</div>`)+
     (invMenor?`<div class="warn"><b>Max por debajo del Min: ${nf.format(invMenor)} SKUs en la V L.</b> Es un error de carga: el sistema no puede reponer bien. Marcados como Corregir.</div>`:'')+
@@ -2121,8 +2132,9 @@ function renderSem(C){
 function semFiltrado(){
   if(!semR)return [];
   const a=$('#semA').value,f=$('#semF').value,ar=$('#semAr').value,qq=($('#semQ').value||'').trim().toLowerCase();
-  return semR.sku.filter(r=>
-    (a==='all'||(a==='acc'?r.acc!=='OK':a==='corto'?r.prom>0&&(r.maxAct||0)<r.prom:a==='cortoPico'?r.pico>0&&(r.maxAct||0)<r.pico:a==='minmax'?(r.maxAct||0)<=(r.minAct||0):r.acc===a))&&
+  const base=(MODELO==='RXM'&&semR.resto&&(a==='all'||a==='cero'))?(a==='cero'?semR.resto.filter(r=>r.acc==='Poner en 0'):semR.sku.concat(semR.resto)):semR.sku;
+  return base.filter(r=>
+    (a==='all'||a==='cero'||(a==='acc'?r.acc!=='OK':a==='corto'?r.prom>0&&(r.maxAct||0)<r.prom:a==='cortoPico'?r.pico>0&&(r.maxAct||0)<r.pico:a==='minmax'?(r.maxAct||0)<=(r.minAct||0):r.acc===a))&&
     (f==='all'||r.grp===f)&&(ar==='all'||r.area===ar)&&
     (!qq||String(r.s).includes(qq)||r.name.toLowerCase().includes(qq)));
 }
@@ -2151,8 +2163,8 @@ function renderSemSku(){
     sel.innerHTML='<option value="all">Todas</option>'+as.map(x=>`<option value="${x}">${x}</option>`).join('')}
   const L=semFiltrado(),lim=Math.min(L.length,600);
   const n={Corregir:0,Subir:0,Bajar:0,OK:0};for(const r of semR.sku)n[r.acc]++;
-  $('#semCount').innerHTML=`${nf.format(L.length)} SKUs · <span style="color:#ff9d97">${nf.format(n.Corregir)} corregir</span> · <span style="color:#ffd34d">${nf.format(n.Subir)} subir</span> · <span style="color:#8ec5ff">${nf.format(n.Bajar)} bajar</span> · ${nf.format(n.OK)} ok`;
-  const col={Corregir:'#ff9d97',Subir:'#ffd34d',Bajar:'#8ec5ff',OK:'#9fe0a8'};
+  $('#semCount').innerHTML=`${nf.format(L.length)} SKUs · <span style="color:#ff9d97">${nf.format(n.Corregir)} corregir</span> · <span style="color:#ffd34d">${nf.format(n.Subir)} subir</span> · <span style="color:#8ec5ff">${nf.format(n.Bajar)} bajar</span> · ${nf.format(n.OK)} ok`+(MODELO==='RXM'&&semR.resto?` · <span style="color:#c9a3ff">${nf.format(semR.resto.filter(r=>r.acc==='Poner en 0').length)} poner en 0</span>`:'');
+  const col={Corregir:'#ff9d97',Subir:'#ffd34d',Bajar:'#8ec5ff',OK:'#9fe0a8','Poner en 0':'#c9a3ff'};
   let h='<thead><tr>'+SEM_COLS.map(c=>`<th class="${['SKU Name','Motivo'].includes(c[0])?'l':''}">${semLabel(c[0])}</th>`).join('')+'</tr></thead><tbody>';
   for(let i=0;i<lim;i++){const r=L[i];
     h+='<tr>'+
@@ -2259,6 +2271,13 @@ function renderSim(){
 $('#semF').onchange=$('#semA').onchange=$('#semAr').onchange=()=>renderSemSku();
 $('#semMinD').oninput=$('#semMaxD').oninput=$('#semAprov').oninput=()=>renderSim();
 $('#semVer').onchange=()=>renderSim();
+// Archivo completo para Copernico en RXM: aconsejados con Min y Max, el resto de la V L en 0 y 0.
+const semCopFilas=()=>semR?semR.sku.concat(semR.resto||[]).map(r=>[r.s,r.grp,Math.round(r.minP||0),Math.round(r.maxP||0)]):[];
+$('#semCop').onclick=()=>{if(!semR||MODELO!=='RXM')return;const L=semCopFilas();
+  copy('SKU ID\tGrupo\tMin\tMax\n'+L.map(x=>x.join('\t')).join('\n'),`${nf.format(L.length)} SKUs copiados: ${nf.format(semR.sku.length)} con Min y Max, ${nf.format((semR.resto||[]).length)} en 0 / 0`)};
+$('#semCopCsv').onclick=()=>{if(!semR||MODELO!=='RXM')return;const L=semCopFilas();
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+'SKU ID;Grupo;Min;Max\n'+L.map(x=>x.join(';')).join('\n')],{type:'text/csv;charset=utf-8'}));
+  a.download=`copernico_RXM_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(a.href);toast(`${nf.format(L.length)} SKUs descargados`)};
 // Carga completa: el sistema solo debe leer los SKUs que aconsejamos. Esos van con su
 // Min/Max (en RXX solo Min) y todos los demas SKUs de la V L van en 0, sin importar
 // los filtros de la tabla.
@@ -2284,8 +2303,9 @@ function aplicarModeloUI(){
   $('#semModeloNote').innerHTML=RX
     ?'<b>RXX · mínimo + demanda.</b> Cuando la demanda del día supera al inventario de picking, se dispara un reabasto de <b>demanda + Min − stock</b> y después de pickear queda el Min. Solo se configura el <b>Min</b> (el Max no se usa): a más Min, menos reabastos. Arranca con el stock real de picking.'
     :'<b>RXM · mínimo y máximo.</b> Cuando el inventario de picking llega al <b>Min</b> o por debajo, se dispara y repone hasta el <b>Max</b> configurado. Se configuran Min y Max: a más ciclo (Max − Min), menos reabastos.';
-  const sa=$('#semA');for(const o of sa.options)if(['corto','cortoPico','minmax'].includes(o.value))o.hidden=o.disabled=RX;
-  if(RX&&['corto','cortoPico','minmax'].includes(sa.value))sa.value='acc';
+  const sa=$('#semA');for(const o of sa.options){if(['corto','cortoPico','minmax','cero'].includes(o.value))o.hidden=o.disabled=RX}
+  $('#semCop').hidden=$('#semCopCsv').hidden=RX;
+  if(RX&&['corto','cortoPico','minmax','cero'].includes(sa.value))sa.value='acc';
   $('#semUp').textContent=RX?'Copiar Min':'Copiar Min/Max';
 }
 document.querySelectorAll('#semModelo button').forEach(b=>b.onclick=()=>{MODELO=b.dataset.m;try{localStorage.setItem('cd47_modelo',MODELO)}catch(e){}aplicarModeloUI();renderSim()});
