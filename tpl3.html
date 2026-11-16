@@ -177,6 +177,36 @@ table.cmp td.hi{color:var(--yellow2)}
 .sim .cap2{font-family:"Barlow Condensed";font-size:20px;font-weight:700;color:var(--yellow);margin-left:4px}
 .warn{border:1px solid #7a2d28;background:#2a1716;border-radius:10px;padding:12px 14px;margin-top:12px;color:#ffb8b3;line-height:1.5}
 @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.charts{grid-template-columns:1fr}.htop{flex-direction:column;align-items:flex-start}.dock{text-align:left}}
+/* ---------- celular ---------- */
+@media(max-width:640px){
+  html,body{font-size:13px}
+  .wrap{padding:0 10px 30px}
+  h1{font-size:24px}.sub{font-size:12px}.dock b{font-size:16px}
+  .scene{height:72px}.racks{height:52px;bottom:12px;gap:6px}.shelf{height:16px}.bx{width:10px;height:10px}.bx.t{height:12px}.bx.s{height:8px;width:8px}
+  .fl{width:64px;height:48px}
+  /* solapas en una fila que se desliza con el dedo */
+  .tabsin{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none}.tabsin::-webkit-scrollbar{display:none}
+  .tabbtn{white-space:nowrap;padding:10px 12px;font-size:13.5px;flex:none}
+  .panel{padding:10px;margin-top:10px;border-radius:8px}
+  .ptitle{font-size:15px}
+  .kpis{grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .kpi{padding:10px}.kpi .v{font-size:24px}.kpi .l{font-size:10.5px}.kpi .s{font-size:11px}
+  .trvK .ln b{font-size:18px}
+  .toolbar{gap:6px}.toolbar label{font-size:11px}
+  select,input[type=search],.btn{font-size:12.5px;padding:6px 8px}
+  input[type=search]{width:100%}
+  .spacer{display:none}
+  .drop{padding:10px;gap:10px}.drop .ico{width:36px;height:36px}.drop b{font-size:13px}.drop small{font-size:11px}
+  .chart svg{height:220px}
+  .tbl{max-height:70vh!important}
+  table{font-size:11.5px}th,td{padding:4px 6px}
+  td.nm{max-width:150px}
+  .tps{grid-template-columns:1fr 1fr;gap:8px}.tp{padding:8px 10px}.tp .r div{font-size:18px}
+  .sim label{margin-right:6px;font-size:12px}.sim input[type=number]{width:64px}
+  .note{font-size:11.5px}
+  .warn{padding:9px 10px;font-size:12px}
+  #t7 .note > div[style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}
+}
 </style>
 </head>
 <body>
@@ -230,7 +260,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 20:15</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 20:30</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
