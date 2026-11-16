@@ -228,7 +228,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 18:15</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 18:30</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -2061,17 +2061,39 @@ function renderSim(){
     W.innerHTML=`<div class="warn" style="border-color:#24502f;background:#16241b;color:#9fe0a8">✔ Dentro de capacidad todos los días con esta configuración.</div>`;
   }
   const lab=(p,d)=>d.req>d.cap?`<span style="color:#ff9d97">${nf.format(d.req)}</span>`:nf.format(d.req);
+  // Tabla compacta + sugerencia de mover gente entre zonas (cada persona rinde lo de la zona a la que va).
   const capTot=C.capS+C.capF;
-  const est=(ok,txt)=>`<td class="l" style="color:${ok?'#9fe0a8':'#ff9d97'};font-weight:600">${ok?'✔ ':'⚠ '}${txt}</td>`;
-  const uso=(n,c)=>{const u=c?n/c:Infinity;return `<td style="color:${n<=c?'#9fe0a8':'#ff9d97'};font-weight:600">${c?nf1.format(u*100)+'%':'—'}</td>`};
-  let h='<thead><tr><th class="l" rowspan="2" style="vertical-align:bottom">Fecha</th><th rowspan="2" style="vertical-align:bottom">Demanda uds</th><th class="g" colspan="3">Secos (cap. '+nf.format(C.capS)+')</th><th class="g" colspan="3">Frío (cap. '+nf.format(C.capF)+')</th><th class="g" colspan="4" style="background:#262033">Total CD (cap. '+nf.format(capTot)+')</th><th class="l" rowspan="2" style="vertical-align:bottom">Por zona</th></tr><tr><th>Req.</th><th>Ejec.</th><th>Cola</th><th>Req.</th><th>Ejec.</th><th>Cola</th><th style="background:#262033">Req.</th><th style="background:#262033">Cap.</th><th style="background:#262033">Uso</th><th class="l" style="background:#262033">Total</th></tr></thead><tbody>';
-  let sU=0,sS=0,sSe=0,sSp=0,sF=0,sFe=0,sFp=0,dOkT=0;
-  R.D.forEach((d,j)=>{const o=R.out[j];const ok=!overDays[j];const rt=o.secos.req+o.frio.req,okT=rt<=capTot;
-    sU+=R.dayTot[j];sS+=o.secos.req;sSe+=o.secos.ej;sSp+=o.secos.pend;sF+=o.frio.req;sFe+=o.frio.ej;sFp+=o.frio.pend;if(okT)dOkT++;
-    h+=`<tr><td class="l">${fmtD(d,true)}</td><td>${nf.format(Math.round(R.dayTot[j]))}</td><td>${lab('secos',o.secos)}</td><td>${nf.format(o.secos.ej)}</td><td>${nf.format(o.secos.pend)}</td><td>${lab('frio',o.frio)}</td><td>${nf.format(o.frio.ej)}</td><td>${nf.format(o.frio.pend)}</td><td style="background:#1f1b29">${nf.format(rt)}</td><td style="background:#1f1b29">${nf.format(capTot)}</td>${uso(rt,capTot).replace('<td','<td style="background:#1f1b29"').replace('" style="','; ')}${est(okT,okT?'Dentro':'Fuera')}${est(ok,ok?'OK':'Sobre capacidad')}</tr>`});
-  const nDs=R.D.length,capW=capTot*nDs,rW=sS+sF,okW=rW<=capW,dOkZ=nDs-overDays.filter(Boolean).length;
-  h+=`<tr style="border-top:2px solid #3a414a"><td class="l"><b>Semana (${nDs} días)</b></td><td><b>${nf.format(Math.round(sU))}</b></td><td><b>${nf.format(sS)}</b></td><td><b>${nf.format(sSe)}</b></td><td><b>${nf.format(sSp)}</b></td><td><b>${nf.format(sF)}</b></td><td><b>${nf.format(sFe)}</b></td><td><b>${nf.format(sFp)}</b></td><td style="background:#262033"><b>${nf.format(rW)}</b></td><td style="background:#262033"><b>${nf.format(capW)}</b></td>${uso(rW,capW).replace('<td','<td style="background:#262033"').replace('" style="','; ')}${est(okW,(okW?'Dentro':'Fuera')+` · ${dOkT}/${nDs} días`)}${est(dOkZ===nDs,`${dOkZ}/${nDs} días OK`)}</tr>`;
+  const vv=id=>parseFloat(($(id)||{}).value)||0;
+  const pS=vv('#sProdS')*vv('#sHrS'),pF=vv('#sProdF')*vv('#sHrF');   // reabastos por persona y día
+  const perS=vv('#sPerS'),perF=vv('#sPerF');
+  const sug=(rs,rf)=>{
+    const exS=rs-C.capS,exF=rf-C.capF;
+    if(exS<=0&&exF<=0)return {ok:true,txt:'—'};
+    if(exF>0){ // frío se pasa: traer gente de secos
+      const n=pF>0?Math.ceil(exF/pF):Infinity,libres=pS>0?Math.floor((C.capS-rs)/pS):0;
+      if(n<=Math.min(libres,perS))return {ok:true,txt:`Pasar <b>${n}</b> de secos → frío`};
+      const pasa=Math.max(0,Math.min(libres,perS)),falta=pF>0?Math.ceil((exF-pasa*pF)/pF):0;
+      return {ok:false,txt:(pasa?`Pasar <b>${pasa}</b> de secos → frío y `:'')+`sumar <b>${falta}</b> en frío`};
+    }
+    const n=pS>0?Math.ceil(exS/pS):Infinity,libres=pF>0?Math.floor((C.capF-rf)/pF):0;
+    if(n<=Math.min(libres,perF))return {ok:true,txt:`Pasar <b>${n}</b> de frío → secos`};
+    const pasa=Math.max(0,Math.min(libres,perF)),falta=pS>0?Math.ceil((exS-pasa*pS)/pS):0;
+    return {ok:false,txt:(pasa?`Pasar <b>${pasa}</b> de frío → secos y `:'')+`sumar <b>${falta}</b> en secos`};
+  };
+  const red=(n,c)=>n>c?`<span style="color:#ff9d97;font-weight:600">${nf.format(n)}</span>`:nf.format(n);
+  const pct=(n,c)=>`<span style="color:${n<=c?'#9fe0a8':'#ff9d97'};font-weight:600">${c?nf.format(Math.round(n/c*100))+'%':'—'}</span>`;
+  const B='background:#1f1b29';
+  let h=`<thead><tr><th class="l">Fecha</th><th>Secos<br><span style="font-weight:400;color:#7f8994">req / ${nf.format(C.capS)}</span></th><th>Frío<br><span style="font-weight:400;color:#7f8994">req / ${nf.format(C.capF)}</span></th><th style="${B}">Total<br><span style="font-weight:400;color:#7f8994">req / ${nf.format(capTot)}</span></th><th style="${B}">Uso</th><th class="l">Estado</th><th class="l">Sugerencia de personal</th></tr></thead><tbody>`;
+  let sS=0,sF=0,dZ=0,dOkSug=0;
+  R.D.forEach((d,j)=>{const o=R.out[j];const rs=o.secos.req,rf=o.frio.req,rt=rs+rf,okZ=!overDays[j],sg=sug(rs,rf);
+    sS+=rs;sF+=rf;if(okZ)dZ++;if(sg.ok)dOkSug++;
+    const est=okZ?'<span style="color:#9fe0a8;font-weight:600">✔ OK</span>':rt<=capTot?'<span style="color:#ffd34d;font-weight:600">⇄ Reasignar</span>':'<span style="color:#ff9d97;font-weight:600">⚠ Falta gente</span>';
+    h+=`<tr><td class="l">${fmtD(d)}</td><td>${red(rs,C.capS)}</td><td>${red(rf,C.capF)}</td><td style="${B}">${red(rt,capTot)}</td><td style="${B}">${pct(rt,capTot)}</td><td class="l">${est}</td><td class="l" style="color:${okZ?'#7f8994':sg.ok?'#ffd99a':'#ff9d97'}">${sg.txt}</td></tr>`});
+  const nDs=R.D.length,rW=sS+sF,capW=capTot*nDs;
+  h+=`<tr style="border-top:2px solid #3a414a"><td class="l"><b>Semana</b></td><td><b>${red(sS,C.capS*nDs)}</b></td><td><b>${red(sF,C.capF*nDs)}</b></td><td style="${B}"><b>${red(rW,capW)}</b></td><td style="${B}">${pct(rW,capW)}</td><td class="l"><b>${dZ}/${nDs} OK</b></td><td class="l"><b>${dOkSug}/${nDs}</b> días se arreglan moviendo gente</td></tr>`;
   DT.innerHTML=h+'</tbody>';
+  let nt=$('#simDetNote');if(!nt){nt=document.createElement('div');nt.id='simDetNote';nt.className='note';DT.parentElement.after(nt)}
+  nt.innerHTML=`Cada persona rinde unos <b>${nf.format(Math.round(pS))}</b> reabastos por día en secos y <b>${nf.format(Math.round(pF))}</b> en frío (productividad × horas de la zona a la que va). ⇄ Reasignar = el total entra y alcanza con mover gente; ⚠ Falta gente = ni moviendo alcanza.`;
   bars('#chSim',R.D,R.out.map(d=>d.secos.req),'#f5b800','reabastos de secos',R.D.map(()=>C.capS));
   bars('#chSimF',R.D,R.out.map(d=>d.frio.req),'#4f9be8','reabastos de frío',R.D.map(()=>C.capF));
   bars('#chSimT',R.D,R.out.map(d=>d.secos.req+d.frio.req),'#c9a3ff','reabastos en total (secos + frío)',R.D.map(()=>C.capS+C.capF));
