@@ -230,7 +230,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <span id="botStatusTxt">Bot corriendo…</span>
       </span>
       <span class="spacer" style="flex:1"></span>
-      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 19:55</span>
+      <span id="buildStamp" title="Versión publicada. Si no coincide con la última que esperás, GitHub Pages todavía no propagó: refrescá con Ctrl+Shift+R." style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.3px;opacity:.55;cursor:help">build 2026-11-16 20:15</span>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <span class="spacer"></span>
@@ -489,7 +489,7 @@ table.cmp td.hi{color:var(--yellow2)}
   <div id="simWarn"></div>
   <div class="panel">
     <div class="ptitle">Reabastos requeridos por día</div>
-    <div class="note" style="margin-top:0">Cada zona tiene su propia capacidad y no se compensan: la gente de frío no repone secos. La línea verde es la capacidad; lo que se pasa queda en rojo.</div>
+    <div class="note" style="margin-top:0">Cada zona tiene su propia capacidad y no se compensan: la gente de frío no repone secos. Barras = hoy, con los Min/Max de la V L. <b style="color:#ff7ad9">Línea rosa = con los cambios recomendados</b> (tabla de abajo). La línea verde es la capacidad; lo que se pasa queda en rojo.</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px">
       <div class="chart" id="chSim"><div class="cap" id="simCap"></div><svg></svg><div class="tip"></div></div>
       <div class="chart" id="chSimF"><div class="cap" id="simCapF"></div><svg></svg><div class="tip"></div></div>
@@ -930,11 +930,11 @@ function renderAll(){
   renderTemp(D,A);renderDaily(D,A);renderMat('U');renderMat('T');
 }
 
-function bars(sel,D,V,color,unit,capRef){
+function bars(sel,D,V,color,unit,capRef,alt){
   const box=$(sel),svg=box.querySelector('svg'),tip=box.querySelector('.tip');
   const W=svg.clientWidth||560,H=svg.clientHeight||215,ml=54,mr=10,mt=18,mb=38;
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-  const max=Math.max(...V,...(capRef||[]).filter(x=>x!=null),1);const step=nice(max/4);const top=Math.ceil(max/step)*step;
+  const max=Math.max(...V,...(capRef||[]).filter(x=>x!=null),...(alt||[]).filter(x=>x!=null),1);const step=nice(max/4);const top=Math.ceil(max/step)*step;
   const y=v=>mt+(H-mt-mb)*(1-v/top);const bw=(W-ml-mr)/D.length;const w=Math.max(6,bw*0.62);
   let g='';for(let t=0;t<=top+1e-9;t+=step){g+=`<line x1="${ml}" x2="${W-mr}" y1="${y(t)}" y2="${y(t)}" stroke="#2c323a"/><text x="${ml-8}" y="${y(t)+4}" fill="#7f8994" font-size="11" text-anchor="end">${nf.format(t)}</text>`}
   let pk=0;V.forEach((v,i)=>{if(v>V[pk])pk=i});
@@ -963,9 +963,17 @@ function bars(sel,D,V,color,unit,capRef){
     g+=`<line x1="${ml}" x2="${W-mr}" y1="${ya}" y2="${ya}" stroke="#eceff2" stroke-width="1.5" stroke-dasharray="6 4" opacity=".75"/>`+
        `<rect x="${W-mr-lbl.length*6.4-10}" y="${ya-17}" width="${lbl.length*6.4+8}" height="15" rx="3" fill="#121519" opacity=".85"/>`+
        `<text x="${W-mr-6}" y="${ya-6}" fill="#eceff2" font-size="11" font-weight="600" text-anchor="end">${lbl}</text>`}
+  if(alt&&alt.some(v=>v!=null)){
+    // Linea "con cambios": lo que pasaria aplicando los Min/Max recomendados.
+    const px=i=>ml+bw*i+bw/2;let d='';alt.forEach((v,i)=>{if(v==null)return;d+=(d?'L':'M')+px(i)+','+y(v)});
+    g+=`<path d="${d}" fill="none" stroke="#ff7ad9" stroke-width="2.5"/>`;
+    alt.forEach((v,i)=>{if(v==null)return;const fuera=capRef&&capRef[i]!=null&&v>capRef[i];g+=`<circle cx="${px(i)}" cy="${y(v)}" r="5" fill="${fuera?'#e5534b':'#ff7ad9'}" stroke="#121519" stroke-width="2"/>`});
+    const la='Con cambios';
+    g+=`<rect x="${ml+4}" y="${H-mb-20}" width="${la.length*6.6+22}" height="16" rx="3" fill="#121519" opacity=".9"/><circle cx="${ml+13}" cy="${H-mb-12}" r="4" fill="#ff7ad9"/><text x="${ml+21}" y="${H-mb-8}" fill="#ff7ad9" font-size="11" font-weight="700">${la}</text>`;
+  }
   svg.innerHTML=g;
   svg.querySelectorAll('.hit').forEach(r=>{
-    r.onmousemove=e=>{const i=+r.dataset.i;tip.style.display='block';tip.innerHTML=`${fmtD(D[i],true)}${curA?.estDay[i]?' · incluye estimado':agg.partial[i]?' ⚠ incompleto':''}<br><b>${nf.format(Math.round(V[i]))}</b> ${unit}`+(avg>0?`<br><span style="color:#7f8994">vs prom. semanal</span> <b>${V[i]>=avg?'+':''}${nf1.format((V[i]/avg-1)*100)}%</b>`:'')+(capRef&&capRef[i]!=null?(()=>{const n=V[i],c=capRef[i];if(!c)return `<br><span style="color:#7f8994">Necesidad</span> <b>${nf.format(Math.round(n))}</b> · <span style="color:#7f8994">Capacidad</span> <b>0</b><br><span style="color:#ff9d97;font-weight:700">✗ Fuera de capacidad</span>`;const u=n/c,dentro=n<=c;return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #2e353e"><span style="color:#7f8994">Necesidad</span> <b>${nf.format(Math.round(n))}</b><br><span style="color:#7f8994">Capacidad</span> <b>${nf.format(Math.round(c))}</b><br><span style="color:${dentro?'#9fe0a8':'#ff9d97'};font-weight:700">${dentro?'✓ Dentro':'✗ Fuera'} · usa ${nf1.format(u*100)}%</span><br><span style="color:${dentro?'#9fe0a8':'#ff9d97'}">${dentro?'Sobra':'Excede'} ${nf.format(Math.abs(Math.round(n-c)))} (${nf1.format(Math.abs(u-1)*100)}%)</span></div>`})():'');const bb=box.getBoundingClientRect();let lx=e.clientX-bb.left+12;if(lx>bb.width-150)lx-=170;tip.style.left=lx+'px';tip.style.top=(e.clientY-bb.top-10)+'px';r.setAttribute('fill','#ffffff0d')};
+    r.onmousemove=e=>{const i=+r.dataset.i;tip.style.display='block';tip.innerHTML=`${fmtD(D[i],true)}${curA?.estDay[i]?' · incluye estimado':agg.partial[i]?' ⚠ incompleto':''}<br><b>${nf.format(Math.round(V[i]))}</b> ${unit}`+(avg>0?`<br><span style="color:#7f8994">vs prom. semanal</span> <b>${V[i]>=avg?'+':''}${nf1.format((V[i]/avg-1)*100)}%</b>`:'')+(capRef&&capRef[i]!=null?(()=>{const n=V[i],c=capRef[i];if(!c)return `<br><span style="color:#7f8994">Necesidad</span> <b>${nf.format(Math.round(n))}</b> · <span style="color:#7f8994">Capacidad</span> <b>0</b><br><span style="color:#ff9d97;font-weight:700">✗ Fuera de capacidad</span>`;const u=n/c,dentro=n<=c;return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #2e353e"><span style="color:#7f8994">Necesidad</span> <b>${nf.format(Math.round(n))}</b><br><span style="color:#7f8994">Capacidad</span> <b>${nf.format(Math.round(c))}</b><br><span style="color:${dentro?'#9fe0a8':'#ff9d97'};font-weight:700">${dentro?'✓ Dentro':'✗ Fuera'} · usa ${nf1.format(u*100)}%</span><br><span style="color:${dentro?'#9fe0a8':'#ff9d97'}">${dentro?'Sobra':'Excede'} ${nf.format(Math.abs(Math.round(n-c)))} (${nf1.format(Math.abs(u-1)*100)}%)</span></div>`})():'')+(alt&&alt[i]!=null?(()=>{const a=alt[i],c=capRef?capRef[i]:null;const ok=c==null||a<=c;return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #2e353e"><span style="color:#ff7ad9;font-weight:700">● Con cambios</span> <b>${nf.format(Math.round(a))}</b>`+(c?`<br><span style="color:${ok?'#9fe0a8':'#ff9d97'};font-weight:700">${ok?'✓ Dentro':'✗ Fuera'} · usa ${nf1.format(a/c*100)}%</span>`:'')+`<br><span style="color:#7f8994">vs hoy</span> <b>${a-V[i]>0?'+':''}${nf.format(Math.round(a-V[i]))}</b></div>`})():'');const bb=box.getBoundingClientRect();let lx=e.clientX-bb.left+12;if(lx>bb.width-150)lx-=170;tip.style.left=lx+'px';tip.style.top=(e.clientY-bb.top-10)+'px';r.setAttribute('fill','#ffffff0d')};
     r.onmouseleave=()=>{tip.style.display='none';r.setAttribute('fill','transparent')};
   });
 }
@@ -2087,6 +2095,9 @@ function renderSim(){
   if(!simInit){simInit=true}
   mmCalc();
   const C=simCfg();const R=simRun(C,'vl');const nD=R.D.length;
+  // Propuesta (los Min/Max recomendados en la tabla de abajo), dia por dia.
+  try{renderSem(C)}catch(e){console.error('renderSem',e);$('#semWarn').innerHTML='<div class="warn">No se pudo calcular el reabasto semanal: '+esc(e.message)+'</div>'}
+  const PO=semR&&semR.spOut&&semR.spOut.length===nD?semR.spOut:null;
   const reqTot=R.out.map(d=>d.secos.req+d.frio.req);
   const avgReq=reqTot.reduce((a,b)=>a+b,0)/nD;
   const overDays=R.out.map((d,j)=>d.secos.req>d.secos.cap||d.frio.req>d.frio.cap);
@@ -2131,27 +2142,26 @@ function renderSim(){
   const red=(n,c)=>n>c?`<span style="color:#ff9d97;font-weight:600">${nf.format(n)}</span>`:nf.format(n);
   const pct=(n,c)=>`<span style="color:${n<=c?'#9fe0a8':'#ff9d97'};font-weight:600">${c?nf.format(Math.round(n/c*100))+'%':'—'}</span>`;
   const B='background:#1f1b29';
-  let h=`<thead><tr><th class="l">Fecha</th><th>Secos<br><span style="font-weight:400;color:#7f8994">req / ${nf.format(C.capS)}</span></th><th>Frío<br><span style="font-weight:400;color:#7f8994">req / ${nf.format(C.capF)}</span></th><th style="${B}">Total<br><span style="font-weight:400;color:#7f8994">req / ${nf.format(capTot)}</span></th><th style="${B}">Uso</th><th class="l">Estado</th><th class="l">Sugerencia de personal</th></tr></thead><tbody>`;
-  let sS=0,sF=0,dZ=0,dOkSug=0;
+  let h=`<thead><tr><th class="l">Fecha</th><th>Secos<br><span style="font-weight:400;color:#7f8994">req / ${nf.format(C.capS)}</span></th><th>Frío<br><span style="font-weight:400;color:#7f8994">req / ${nf.format(C.capF)}</span></th><th style="${B}">Total<br><span style="font-weight:400;color:#7f8994">req / ${nf.format(capTot)}</span></th><th style="${B}">Uso</th><th class="l">Estado</th><th class="l">Sugerencia de personal</th>${PO?'<th style="background:#2a1830;color:#ff9be3">Con cambios<br><span style="font-weight:400">secos / frío</span></th><th class="l" style="background:#2a1830;color:#ff9be3">Con cambios</th>':''}</tr></thead><tbody>`;
+  let sS=0,sF=0,dZ=0,dOkSug=0,prS=0,prF=0,pOk=0;
   R.D.forEach((d,j)=>{const o=R.out[j];const rs=o.secos.req,rf=o.frio.req,rt=rs+rf,okZ=!overDays[j],sg=sug(rs,rf);
     sS+=rs;sF+=rf;if(okZ)dZ++;if(sg.ok)dOkSug++;
     const est=okZ?'<span style="color:#9fe0a8;font-weight:600">✔ OK</span>':rt<=capTot?'<span style="color:#ffd34d;font-weight:600">⇄ Reasignar</span>':'<span style="color:#ff9d97;font-weight:600">⚠ Falta gente</span>';
-    h+=`<tr><td class="l">${fmtD(d)}</td><td>${red(rs,C.capS)}</td><td>${red(rf,C.capF)}</td><td style="${B}">${red(rt,capTot)}</td><td style="${B}">${pct(rt,capTot)}</td><td class="l">${est}</td><td class="l" style="color:${okZ?'#7f8994':sg.ok?'#ffd99a':'#ff9d97'}">${sg.txt}</td></tr>`});
+    h+=`<tr><td class="l">${fmtD(d)}</td><td>${red(rs,C.capS)}</td><td>${red(rf,C.capF)}</td><td style="${B}">${red(rt,capTot)}</td><td style="${B}">${pct(rt,capTot)}</td><td class="l">${est}</td><td class="l" style="color:${okZ?'#7f8994':sg.ok?'#ffd99a':'#ff9d97'}">${sg.txt}</td>${PO?(()=>{const p=PO[j],cs=p.secos.req,cf=p.frio.req,ok=cs<=C.capS&&cf<=C.capF;if(ok)pOk++;prS+=cs;prF+=cf;return `<td style="background:#1f1424">${red(cs,C.capS)} / ${red(cf,C.capF)}</td><td class="l" style="background:#1f1424">${ok?'<span style="color:#9fe0a8;font-weight:600">✔ OK</span>':cs+cf<=capTot?'<span style="color:#ffd34d;font-weight:600">⇄ Reasignar</span>':'<span style="color:#ff9d97;font-weight:600">⚠ Falta gente</span>'}</td>`})():''}</tr>`});
   const nDs=R.D.length,rW=sS+sF,capW=capTot*nDs;
-  h+=`<tr style="border-top:2px solid #3a414a"><td class="l"><b>Semana</b></td><td><b>${red(sS,C.capS*nDs)}</b></td><td><b>${red(sF,C.capF*nDs)}</b></td><td style="${B}"><b>${red(rW,capW)}</b></td><td style="${B}">${pct(rW,capW)}</td><td class="l"><b>${dZ}/${nDs} OK</b></td><td class="l"><b>${dOkSug}/${nDs}</b> días se arreglan moviendo gente</td></tr>`;
+  h+=`<tr style="border-top:2px solid #3a414a"><td class="l"><b>Semana</b></td><td><b>${red(sS,C.capS*nDs)}</b></td><td><b>${red(sF,C.capF*nDs)}</b></td><td style="${B}"><b>${red(rW,capW)}</b></td><td style="${B}">${pct(rW,capW)}</td><td class="l"><b>${dZ}/${nDs} OK</b></td><td class="l"><b>${dOkSug}/${nDs}</b> días se arreglan moviendo gente</td>${PO?`<td style="background:#2a1830"><b>${red(prS,C.capS*nDs)} / ${red(prF,C.capF*nDs)}</b></td><td class="l" style="background:#2a1830"><b>${pOk}/${nDs} OK</b></td>`:''}</tr>`;
   DT.innerHTML=h+'</tbody>';
   let nt=$('#simDetNote');if(!nt){nt=document.createElement('div');nt.id='simDetNote';nt.className='note';DT.parentElement.after(nt)}
   nt.innerHTML=`Cada persona rinde unos <b>${nf.format(Math.round(pS))}</b> reabastos por día en secos y <b>${nf.format(Math.round(pF))}</b> en frío (productividad × horas de la zona a la que va). ⇄ Reasignar = el total entra y alcanza con mover gente; ⚠ Falta gente = ni moviendo alcanza.`;
-  bars('#chSim',R.D,R.out.map(d=>d.secos.req),'#f5b800','reabastos de secos',R.D.map(()=>C.capS));
-  bars('#chSimF',R.D,R.out.map(d=>d.frio.req),'#4f9be8','reabastos de frío',R.D.map(()=>C.capF));
-  bars('#chSimT',R.D,R.out.map(d=>d.secos.req+d.frio.req),'#c9a3ff','reabastos en total (secos + frío)',R.D.map(()=>C.capS+C.capF));
+  bars('#chSim',R.D,R.out.map(d=>d.secos.req),'#f5b800','reabastos de secos',R.D.map(()=>C.capS),PO&&PO.map(d=>d.secos.req));
+  bars('#chSimF',R.D,R.out.map(d=>d.frio.req),'#4f9be8','reabastos de frío',R.D.map(()=>C.capF),PO&&PO.map(d=>d.frio.req));
+  bars('#chSimT',R.D,R.out.map(d=>d.secos.req+d.frio.req),'#c9a3ff','reabastos en total (secos + frío)',R.D.map(()=>C.capS+C.capF),PO&&PO.map(d=>d.secos.req+d.frio.req));
   $('#simCapT').innerHTML=`<b>Total CD (macro)</b> · secos + frío · capacidad ${nf.format(C.capS+C.capF)} por día. <span style="color:#7f8994">Ojo: el total puede entrar aunque una zona se pase; mirá también cada zona.</span>`;
   $('#simCapF').textContent=`Frío · capacidad ${nf.format(C.capF)} por día`;
   $('#simCap').textContent=`Secos · capacidad ${nf.format(C.capS)} por día`;
   let th='<thead><tr><th class="l">SKU ID</th><th class="l">SKU Name</th><th class="l">Pool</th><th class="l">Temp.</th><th>Reabastos</th><th>Pico diario</th><th>Min</th><th>Max actual</th><th>Max propuesto</th><th>Faltante (uds)</th></tr></thead><tbody>';
   for(const it of R.suggest.slice(0,300))th+=`<tr><td class="l mono">${it.s}</td><td class="l nm" title="${esc(it.name)}">${esc(it.name)}</td><td class="tc">${it.pool}</td><td class="tc">${esc(it.temp)}</td><td>${nf.format(it.trig)}</td><td>${f0(it.pico)}</td><td>${f0(it.min)}</td><td>${f0(it.max)}</td><td style="color:${it.maxSug>it.max?'#ffd34d':'inherit'}">${f0(it.maxSug)}</td><td>${f0(it.short)}</td></tr>`;
   TP.innerHTML=th+'</tbody>';
-  try{renderSem(C)}catch(e){console.error('renderSem',e);$('#semWarn').innerHTML='<div class="warn">No se pudo calcular el reabasto semanal: '+esc(e.message)+'</div>'}
 }
 $('#semF').onchange=$('#semA').onchange=$('#semAr').onchange=()=>renderSemSku();
 $('#semMinD').oninput=$('#semMaxD').oninput=$('#semAprov').oninput=()=>renderSim();
