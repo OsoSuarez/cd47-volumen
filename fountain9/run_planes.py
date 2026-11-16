@@ -116,13 +116,17 @@ def login(page):
     # modal "Choose Dataset" (no hay navegación), así que esperamos una de las dos cosas.
     page.locator("button[type=submit]").first.click()
     modal_sel = "[role=dialog]:visible, .modal:visible, .ant-modal:visible, .MuiDialog-root:visible"
-    dataset = page.get_by_text("Choose Dataset")
+    def dataset_visible():
+        try:
+            return page.get_by_text("Choose Dataset").first.is_visible()
+        except Exception:
+            return False
     for _ in range(90):
-        if "/login" not in page.url or page.locator(modal_sel).count() or dataset.count():
+        if "/login" not in page.url or page.locator(modal_sel).count() or dataset_visible():
             break
         page.wait_for_timeout(1000)
 
-    if page.locator(modal_sel).count() or dataset.count():
+    if page.locator(modal_sel).count() or dataset_visible():
         print("LOGIN OK (modal post-login). URL:", page.url)
         pass_secondary_screen(page)
         return
@@ -141,13 +145,23 @@ def pass_secondary_screen(page):
     # y se confirma con el botón OK / Aceptar / Continuar.
     page.wait_for_timeout(2000)
     # "Choose Dataset": viene con "rappi" elegido, alcanza con apretar OK.
-    if page.get_by_text("Choose Dataset").count():
-        ok = page.get_by_role("button", name=re.compile(r"^\s*OK\s*$", re.I)).first
-        if not ok.count():
-            ok = page.locator("button:visible", has_text=re.compile(r"^\s*OK\s*$")).first
-        ok.click(timeout=15_000)
-        print("CHOOSE DATASET: clic en OK. URL:", page.url)
+    # Solo si la ventanita esta a la vista (su texto queda escondido en la pagina despues).
+    # Nunca corta la corrida: si no hay boton OK visible, sigue de largo.
+    try:
+        visible = page.get_by_text("Choose Dataset").first.is_visible()
+    except Exception:
+        visible = False
+    if visible:
+        try:
+            ok = page.locator("button:visible", has_text=re.compile(r"^\s*OK\s*$", re.I)).first
+            ok.click(timeout=8_000)
+            print("CHOOSE DATASET: clic en OK. URL:", page.url)
+        except Exception as e:
+            print("CHOOSE DATASET: no encontre OK visible, sigo. (", str(e).splitlines()[0][:120], ")")
         page.wait_for_timeout(4000)
+        return
+    if page.get_by_text("Choose Dataset").count():
+        print("CHOOSE DATASET: ya no esta a la vista, sigo.")
         return
     modal = page.locator("[role=dialog]:visible, .modal:visible, .ant-modal:visible").first
     if not modal.count():
