@@ -466,6 +466,7 @@ table.cmp td.hi{color:var(--yellow2)}
   </div>
 </div>
 <div class="wrap sim" id="t4" style="display:none">
+  <div class="panel" id="semFuente" style="display:none;border:1px solid #1f5a52;color:#9fe3d6;font-size:13px"></div>
   <div class="panel" id="semModeloBox">
     <div class="ptitle">Modelo de reabastecimiento</div>
     <div class="toolbar" id="semModelo" style="row-gap:10px"><button class="btn" data-m="RXM">RXM · Min / Max</button><button class="btn" data-m="RXX">RXX · Min + demanda</button></div>
@@ -866,7 +867,8 @@ function recompute(){
   const temps=[...new Set(M.s.map(s=>(skus.get(s)?.temp)||'Sin dato'))].sort(tSort);
   const dT=dates.map(()=>new Set());for(let i=0;i<M.s.length;i++)dT[M.d[i]].add((skus.get(M.s[i])?.temp)||'Sin dato');
   const partial=dT.map(x=>x.size<temps.length);
-  agg={dates,whs:[...whs].sort((a,b)=>a-b),keys:merged.size,M,temps,partial,dT};
+  agg={dates,whs:[...whs].sort((a,b)=>a-b),keys:merged.size,M,Mplan:M,temps,partial,dT};
+  try{aplicarTRHoy(true)}catch(e){console.warn('trvHoy',e)}
   renderFiles();renderWhSel();renderAll();renderMM();
   try{trvPlanDesdeAgg()}catch(e){console.warn('trv',e)}
 }
@@ -2082,6 +2084,7 @@ function semTransHtml(R,C){
 
 let semR=null;
 function renderSem(C){
+  {const fb=$('#semFuente');if(fb){fb.style.display=demHoy?'':'none';fb.innerHTML=demHoyTxt()}}
   const RXm=MODELO==='RXX';
   const KP=$('#semKpis'),W=$('#semWarn'),GR=$('#semGrp');
   const R=semR=semCalc(C);
@@ -2333,23 +2336,54 @@ var TRV_K='trv_v1';
 var trv={tr:{},plan:{},names:{}}; // tr[fecha]={file,at,rows:[w,s,o,p,d,...],meta:{s:[temp,transf]}}; plan[fecha]={inicio:[w,s,q,...]}
 var trvListo=false,trvPend=false;
 function trvGuardar(){return snapTx('readwrite',st=>st.put(trv,TRV_K)).catch(e=>console.warn('trv',e))}
+// ---------- demanda real de hoy ----------
+// Si en la solapa Revision TR hay un Excel con FECHA CREADO = hoy, esos pedidos (Q_Ordered) son la
+// demanda real del dia y reemplazan al plan de Fountain9 en ese dia (el Sheet MINIMOS ACTUALES usa lo mismo).
+// El plan puro queda en agg.Mplan: la comparacion de la solapa Revision TR sigue usando el plan.
+var demHoy=null;
+function hoyBA(){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}).format(new Date())}catch(e){return new Date().toISOString().slice(0,10)}}
+function aggTemps(){
+  const M=agg.M;
+  agg.temps=[...new Set(M.s.map(s=>(skus.get(s)?.temp)||'Sin dato'))].sort(tSort);
+  const dT=agg.dates.map(()=>new Set());for(let i=0;i<M.s.length;i++)dT[M.d[i]].add((skus.get(M.s[i])?.temp)||'Sin dato');
+  agg.dT=dT;agg.partial=dT.map(x=>x.size<agg.temps.length);
+}
+function aplicarTRHoy(enRecompute){
+  demHoy=null;
+  if(!agg||!agg.Mplan)return false;
+  const hubo=agg.M!==agg.Mplan;agg.M=agg.Mplan;
+  const hoy=hoyBA(),j=agg.dates.indexOf(hoy),T=trv.tr[hoy];
+  if(!trvListo||j<0||!T||!T.rows||!T.rows.length){if(hubo){aggTemps();if(!enRecompute)renderAll()}return false}
+  const P=agg.Mplan,N={w:[],s:[],d:[],q:[]};let plan=0,tot=0;
+  for(let i=0;i<P.q.length;i++){if(P.d[i]===j){plan+=P.q[i];continue}N.w.push(P.w[i]);N.s.push(P.s[i]);N.d.push(P.d[i]);N.q.push(P.q[i])}
+  const R=T.rows,meta=T.meta||{};
+  for(let i=0;i<R.length;i+=5){const q=R[i+2];if(!(q>0))continue;const s=R[i+1];
+    if(!skus.has(s)){const m=meta[s]||[];skus.set(s,{name:trv.names[s]||('SKU '+s),batch:0,temp:tName(m[0]),deTR:true})}
+    N.w.push(R[i]);N.s.push(s);N.d.push(j);N.q.push(q);tot+=q}
+  agg.M=N;aggTemps();
+  demHoy={fecha:hoy,file:T.file,total:tot,plan,j};
+  if(!enRecompute)renderAll();
+  return true;
+}
+function demHoyTxt(){return demHoy?`<b>Demanda del ${fmtD(demHoy.fecha)} = TR reales</b> (${esc(demHoy.file)}: ${nf.format(demHoy.total)} u pedidas) en vez del plan (${nf.format(demHoy.plan)} u). Los demás días siguen con el plan.`:''}
+
 // Excel publicado en el repo (trv.json): lo ve cualquiera que abra el link. Si en este
 // navegador ya hay una carga mas nueva del mismo dia, esa gana.
 function trvPublicado(){return fetch('trv.json?v='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null).then(P=>{
   if(!P||!P.tr)return;
   for(const [d,T] of Object.entries(P.tr)){const L=trv.tr[d];if(!L||(T.at||0)>(L.at||0)){T.pub=true;trv.tr[d]=T}}
   for(const [s,n] of Object.entries(P.names||{}))if(!trv.names[s])trv.names[s]=n})}
-snapTx('readonly',st=>st.get(TRV_K)).catch(()=>null).then(v=>{if(v&&v.tr)trv=v;return trvPublicado()}).then(()=>{trvListo=true;if(trvPend)trvPlanDesdeAgg();trvRender()});
+snapTx('readonly',st=>st.get(TRV_K)).catch(()=>null).then(v=>{if(v&&v.tr)trv=v;return trvPublicado()}).then(()=>{trvListo=true;if(trvPend)trvPlanDesdeAgg();try{aplicarTRHoy()}catch(e){console.warn('trvHoy',e)}trvRender()});
 // Lo llama recompute: copia lo que el plan cargado dice para cada fecha.
 function trvPlanDesdeAgg(){
   if(!trvListo){trvPend=true;return}
   if(!agg||!agg.dates.length)return;
-  const ini=agg.dates[0],M=agg.M,porD=agg.dates.map(()=>[]);
+  const ini=agg.dates[0],M=agg.Mplan||agg.M,porD=agg.dates.map(()=>[]);
   for(let i=0;i<M.q.length;i++)porD[M.d[i]].push(M.w[i],M.s[i],M.q[i]);
   let cambio=false;
   agg.dates.forEach((d,j)=>{if(!porD[j].length)return;trv.plan[d]=trv.plan[d]||{};const prev=trv.plan[d][ini];
     if(!prev||prev.length!==porD[j].length){trv.plan[d][ini]=porD[j];cambio=true}});
-  for(const s of agg.M.s){const k=skus.get(s);if(k&&k.name&&!trv.names[s]){trv.names[s]=k.name;cambio=true}}
+  for(const s of (agg.Mplan||agg.M).s){const k=skus.get(s);if(k&&k.name&&!trv.names[s]){trv.names[s]=k.name;cambio=true}}
   // Se guardan 45 días para atrás como mucho.
   const lim=new Date(Date.now()-45*864e5).toISOString().slice(0,10);
   for(const d of Object.keys(trv.plan))if(d<lim){delete trv.plan[d];cambio=true}
@@ -2391,7 +2425,7 @@ async function trvAgregar(list){
   for(const file of list){el.textContent='Leyendo '+file.name+'…';
     try{const ds=await trvLeer(file);trvSel=ds.at(-1);el.textContent='';toast(`${file.name}: ${ds.length} día${ds.length>1?'s':''} cargado${ds.length>1?'s':''}`)}
     catch(e){el.innerHTML=`<span style="color:#ff9d97">⚠ ${esc(file.name)}: ${esc(e.message)}</span>`}}
-  await trvGuardar();trvRender();
+  await trvGuardar();try{aplicarTRHoy()}catch(e){console.warn('trvHoy',e)}trvRender();
 }
 var trvSel=null,trvRows=[];
 const trvDrop=$('#dropTRV'),trvFi=$('#fiTRV');
@@ -2402,7 +2436,7 @@ trvDrop.addEventListener('drop',e=>trvAgregar([...e.dataTransfer.files]));
 $('#trvDia').onchange=e=>{trvSel=e.target.value;trvRender()};
 $('#trvPlan').onchange=$('#trvQ').onchange=$('#trvF').onchange=()=>trvRender();
 let trvQt;$('#trvQs').oninput=()=>{clearTimeout(trvQt);trvQt=setTimeout(trvSkuTbl,150)};
-$('#trvBorrar').onclick=async()=>{if(!trvSel||!trv.tr[trvSel])return;delete trv.tr[trvSel];trvSel=null;await trvGuardar();trvRender();toast('Día borrado')};
+$('#trvBorrar').onclick=async()=>{if(!trvSel||!trv.tr[trvSel])return;delete trv.tr[trvSel];trvSel=null;await trvGuardar();try{aplicarTRHoy()}catch(e){console.warn('trvHoy',e)}trvRender();toast('Día borrado')};
 function trvPlanes(d){const v=trv.plan[d]||{};return Object.keys(v).sort()}
 // Compara un día. ref = fecha de inicio del plan usado; qi = 0 ordered, 1 picked, 2 delivered.
 function trvComparar(d,ref,qi){
