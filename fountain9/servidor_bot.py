@@ -4,9 +4,10 @@ Escucha solo en 127.0.0.1:9748 y solo sabe hacer una cosa: lanzar run_planes.py.
 
 Uso: python fountain9/servidor_bot.py   (o doble clic en servidor_bot.bat)
 """
-import http.server, json, os, pathlib, subprocess, sys, threading, time, urllib.parse
+import http.server, json, os, pathlib, shutil, subprocess, sys, tempfile, threading, time, urllib.parse
 
 PORT = 9748
+REPO_URL = os.environ.get("TRV_REPO", "https://github.com/OsoSuarez/cd47-volumen.git")
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
 ORIGENES = {"https://ososuarez.github.io", "http://localhost", "http://127.0.0.1"}
 estado = {"running": False, "modo": None, "inicio": None, "fin": None, "rc": None}
@@ -32,6 +33,42 @@ def lanzar(modo):
     threading.Thread(target=esperar, daemon=True).start()
 
 
+def publicar_tr(payload):
+    """Mezcla el TR de un dia en trv.json y lo sube al repo (clon temporal, igual que el bot con base.json)."""
+    fecha = str(payload["fecha"])
+    T = payload["T"]
+    if not (len(fecha) == 10 and isinstance(T, dict) and T.get("rows")):
+        raise ValueError("TR invalido")
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="trv_pub_"))
+    try:
+        g = lambda *a, **k: subprocess.run(["git", "-C", str(tmp), *a], check=True, capture_output=True, text=True, **k)
+        subprocess.run(["git", "clone", "--depth", "1", REPO_URL, str(tmp)], check=True, capture_output=True, text=True)
+        g("config", "user.email", "jorge.suarez@rappi.com")
+        g("config", "user.name", "Jorge Suarez")
+        f = tmp / "trv.json"
+        base = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {"tr": {}, "names": {}}
+        T = dict(T)
+        T.pop("pub", None)
+        T["at"] = int(time.time() * 1000)
+        base.setdefault("tr", {})[fecha] = T
+        base.setdefault("names", {}).update({str(k): v for k, v in (payload.get("names") or {}).items()})
+        lim = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 45 * 86400))
+        base["tr"] = {d: v for d, v in base["tr"].items() if d >= lim}
+        f.write_text(json.dumps(base, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
+        g("add", "trv.json")
+        if not g("diff", "--cached", "--stat").stdout.strip():
+            return {"ok": True, "cambio": False}
+        g("commit", "-m", f"TR real {fecha}: publicar Detalle de TRs (trv.json)")
+        try:
+            g("push")
+        except subprocess.CalledProcessError:
+            g("pull", "--rebase")
+            g("push")
+        return {"ok": True, "cambio": True, "fecha": fecha, "filas": len(T["rows"]) // 5}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -55,9 +92,26 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(204)
         self._cors()
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "*")
         self.end_headers()
+
+    def do_POST(self):
+        u = urllib.parse.urlparse(self.path)
+        if self.headers.get("Origin", "") not in ORIGENES:
+            return self._json({"error": "origen no permitido"}, 403)
+        if u.path != "/publicar-tr":
+            return self._json({"error": "no existe"}, 404)
+        try:
+            n = int(self.headers.get("Content-Length", "0"))
+            if n <= 0 or n > 60_000_000:
+                return self._json({"error": "tamano invalido"}, 400)
+            payload = json.loads(self.rfile.read(n).decode("utf-8"))
+            return self._json(publicar_tr(payload))
+        except subprocess.CalledProcessError as e:
+            return self._json({"ok": False, "error": (e.stderr or str(e))[-400:]}, 500)
+        except Exception as e:
+            return self._json({"ok": False, "error": str(e)}, 500)
 
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)

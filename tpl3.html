@@ -597,7 +597,7 @@ table.cmp td.hi{color:var(--yellow2)}
       <label style="margin-left:8px">Plan de referencia</label><select id="trvPlan"></select>
       <label style="margin-left:8px">Ejecutado</label><select id="trvQ"><option value="o">Q_Ordered (lo pedido en la TR)</option><option value="p">Q_Picked (lo pickeado)</option><option value="d">Q_Delivered (lo entregado)</option></select>
       <span class="spacer"></span>
-      <button class="btn" id="trvBorrar">Borrar día</button>
+      <button class="btn" id="trvPublicar" title="Sube el TR de este día al repo para que lo vea cualquiera que abra el link. Necesita el servidor del bot prendido (servidor_bot.bat)">Publicar para todos</button> <button class="btn" id="trvBorrar">Borrar día</button>
     </div>
     <div class="note" id="trvNota"></div>
   </div>
@@ -2482,6 +2482,17 @@ trvDrop.addEventListener('drop',e=>trvAgregar([...e.dataTransfer.files]));
 $('#trvDia').onchange=e=>{trvSel=e.target.value;trvRender()};
 $('#trvPlan').onchange=$('#trvQ').onchange=$('#trvF').onchange=()=>trvRender();
 let trvQt;$('#trvQs').oninput=()=>{clearTimeout(trvQt);trvQt=setTimeout(trvSkuTbl,150)};
+$('#trvPublicar').onclick=async()=>{
+  if(!trvSel||!trv.tr[trvSel]){toast('Elegí primero un día');return}
+  const T=trv.tr[trvSel],names={};for(let i=1;i<T.rows.length;i+=5){const k=T.rows[i];if(trv.names[k])names[k]=trv.names[k]}
+  const b=$('#trvPublicar'),t0=b.textContent;b.disabled=true;b.textContent='Publicando…';
+  try{
+    const r=await fetch('http://127.0.0.1:9748/publicar-tr',{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({fecha:trvSel,T,names})});
+    const j=await r.json();
+    toast(j.ok?(j.cambio===false?'Ya estaba publicado igual':'Publicado ✔ GitHub lo actualiza en ~1 minuto'):'No se pudo publicar: '+(j.error||'error'));
+  }catch(e){toast('Prendé el servidor del bot (servidor_bot.bat) y volvé a probar')}
+  b.disabled=false;b.textContent=t0;
+};
 $('#trvBorrar').onclick=async()=>{if(!trvSel||!trv.tr[trvSel])return;trv.borrados=trv.borrados||{};trv.borrados[trvSel]=Date.now();delete trv.tr[trvSel];trvSel=null;await trvGuardar();try{aplicarTRHoy()}catch(e){console.warn('trvHoy',e)}trvRender();toast('Día borrado')};
 function trvPlanes(d){const v=trv.plan[d]||{};return Object.keys(v).sort()}
 // Compara un día. ref = fecha de inicio del plan usado; qi = 0 ordered, 1 picked, 2 delivered.
