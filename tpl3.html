@@ -323,6 +323,7 @@ table.cmp td.hi{color:var(--yellow2)}
         <p style="color:#ccc;margin:0 0 12px;font-size:.9rem;line-height:1.5">
           El bot corre en tu compu Windows. Abrí una terminal en la carpeta del proyecto y ejecutá:
         </p>
+        <div id="botAcc" style="margin:0 0 14px"></div>
         <div style="background:#0d0f13;border-radius:8px;padding:14px 16px;font-family:monospace;font-size:.88rem;color:#7dd3fc;letter-spacing:.01em;user-select:all">
           python fountain9/run_planes.py
         </div>
@@ -1119,7 +1120,36 @@ document.querySelector('#cargarCmd').addEventListener('click',()=>{
   navigator.clipboard?.writeText('python fountain9/cargar_planes.py').catch(()=>{});
 });
 // autoload por URL eliminado — el botón "Cargar últimos planes" hace fetch directo a localhost:9747
-$('#btnBot').onclick=()=>{const m=document.getElementById('botModal');m.style.display='flex'};
+const BOT_URL='http://127.0.0.1:9748';
+function botPaint(h){const e=document.getElementById('botAcc');if(e)e.innerHTML=h}
+function botBtn(modo,txt,sub){return `<button data-modo="${modo}" class="btn" style="display:block;width:100%;text-align:left;background:#f5b800;color:#1a1a1a;font-weight:700;margin:6px 0;padding:10px 14px;border-radius:8px">${txt}<div style="font-weight:400;font-size:.78rem;opacity:.8">${sub}</div></button>`}
+let botTimer=null;
+async function botStatus(){
+  try{const r=await (await fetch(BOT_URL+'/status')).json();
+    if(r.running){botPaint('<div style="color:#ffd34d">⏳ El bot está corriendo ('+(r.modo==='bajar'?'solo bajar':'crear y bajar')+'). Se abrió una ventana en tu compu: no la cierres.</div>');return true}
+    if(r.fin){botPaint('<div style="color:'+(r.rc===0?'#4ade80':'#ff9d97')+'">'+(r.rc===0?'✔ El bot terminó. Esperá la próxima corrida de GitHub (o forzala) y tocá Recalcular.':'⚠ El bot terminó con error (código '+r.rc+'). Mirá la ventana del bot o mandale captura a Claude.')+'</div>');return false}
+  }catch(e){}
+  return false;
+}
+async function botAbrir(){
+  const m=document.getElementById('botModal');m.style.display='flex';botPaint('Buscando el servidor del bot en tu compu…');
+  clearInterval(botTimer);
+  try{
+    const ctl=new AbortController();setTimeout(()=>ctl.abort(),2000);
+    await fetch(BOT_URL+'/ping',{signal:ctl.signal});
+    if(await botStatus()){botTimer=setInterval(async()=>{if(!(await botStatus()))clearInterval(botTimer)},5000);return}
+    botPaint(botBtn('completo','Crear planes y bajarlos','Entra a Fountain9, crea los 2 planes y los baja (~20 min)')+botBtn('bajar','Solo bajar los 2 últimos planes','Si ya están creados en Fountain9 (más rápido)'));
+    document.querySelectorAll('#botAcc [data-modo]').forEach(b=>b.onclick=async()=>{
+      botPaint('Lanzando…');
+      try{const r=await (await fetch(BOT_URL+'/run?modo='+b.dataset.modo)).json();
+        if(!r.started&&r.motivo&&r.motivo!=='ya esta corriendo'){botPaint('<div style="color:#ff9d97">No se pudo lanzar: '+r.motivo+'</div>');return}
+        await botStatus();clearInterval(botTimer);botTimer=setInterval(async()=>{if(!(await botStatus()))clearInterval(botTimer)},5000);
+      }catch(e){botPaint('<div style="color:#ff9d97">No se pudo lanzar el bot.</div>')}});
+  }catch(e){
+    botPaint('<div style="color:#ffd34d;font-size:.85rem;line-height:1.5">El servidor del botón no está encendido en tu compu. Hacé doble clic en <b>servidor_bot.bat</b> (una sola vez; con <b>programar_servidor_bot.bat</b> queda automático al iniciar Windows) y volvé a tocar “Ejecutar bot”.<br>Mientras tanto podés correrlo a mano: <code>python fountain9/run_planes.py</code></div>');
+  }
+}
+$('#btnBot').onclick=botAbrir;
 document.getElementById('botModal').addEventListener('click',function(e){if(e.target===this)this.style.display='none'});
 // When user copies the command → flag bot as running
 document.querySelector('#botModal .mono')?.addEventListener('click',()=>{
