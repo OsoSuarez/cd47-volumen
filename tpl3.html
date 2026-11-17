@@ -1607,17 +1607,20 @@ function simRunRXX(C,ov){
     const pr=ov==='vl'?{min:info.min}:(ov?(ov.get(s)||{min:info.min}):(mmProp.get(s)||{}));
     let mn=(pr.min!=null&&!isNaN(pr.min))?pr.min:(isNaN(info.min)?0:info.min);if(!(mn>=0))mn=0;
     const pico=Math.max(...d);
-    items.push({s,name:sk.name||info.name||'',grp:info.grp,pool,temp,d,min:mn,max:info.max,batch,pico,maxSug:mn,maxEff:mn,S:+(STK[String(s)]||0),trig:0,short:0,dd:0,q:0});
+    items.push({s,name:sk.name||info.name||'',grp:info.grp,pool,temp,d,min:mn,max:info.max,batch,pico,maxSug:mn,maxEff:mn,S:+(STK[String(s)]||0),A:+(ALM[String(s)]||0),trig:0,short:0,dd:0,q:0});
   }
   const cap={secos:C.capS,frio:C.capF},out=[],dayTot=new Float64Array(nD);
   for(let j=0;j<nD;j++){
     const f=Math.pow(1+C.g,j),Q={secos:[],frio:[]};
     for(const it of items){const dd=it.d[j]*f;dayTot[j]+=dd;it.dd=dd;
-      if(dd>0&&it.S<dd){let q=dd+it.min-it.S;if(it.batch>0)q=Math.ceil(q/it.batch-1e-9)*it.batch;it.q=q;Q[it.pool].push(it)}}
+      // Sin stock en almacenamiento no hay de dónde reabastecer: no genera tarea (igual que el Sheet, col. O: F>0).
+      if(dd>0&&it.S<dd&&it.A>0){let q=dd+it.min-it.S;if(it.batch>0)q=Math.ceil(q/it.batch-1e-9)*it.batch;
+        if(q>it.A){q=it.batch>0&&it.A>=it.batch?Math.floor(it.A/it.batch+1e-9)*it.batch:it.A}
+        it.q=q;Q[it.pool].push(it)}}
     const day={};
     for(const p of ['secos','frio']){
       const L=Q[p];L.sort((a,b)=>(a.S/a.dd)-(b.S/b.dd));   // primero los que menos cubren su demanda
-      let ej=0;for(const it of L){if(ej>=cap[p])break;it.S+=it.q;it.trig++;ej++}
+      let ej=0;for(const it of L){if(ej>=cap[p])break;it.S+=it.q;it.A-=it.q;it.trig++;ej++}
       day[p]={req:L.length,ej,pend:L.length-ej,cap:cap[p]};
     }
     for(const it of items){it.S-=it.dd;if(it.S<0){it.short+=-it.S;it.S=0}}

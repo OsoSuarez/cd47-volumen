@@ -108,10 +108,17 @@ for r in rows:
     if excl(z) or difer(z, u):
         continue
     sal = pnum(get(r, isa))
-    if sal is None or u not in picks:
+    if sal is None:
         continue
-    STK[sku] += sal
-    occ[u] += sal
+    # Stock de picking = filas con Area = Picking en REFERENCIA (mismo criterio que la col. E del Sheet
+    # MINIMOS ACTUALES). Antes se tomaba toda ubicacion de Piso 1 y se inflaba ~45% con pallets que
+    # REFERENCIA clasifica como almacenamiento.
+    if ia >= 0 and get(r, ia).strip().lower() == 'picking':
+        STK[sku] += sal
+    elif ia < 0 and u in picks:
+        STK[sku] += sal
+    if u in picks:
+        occ[u] += sal
 F = defaultdict(int)
 for u, s in occ.items():
     if s > 0:
