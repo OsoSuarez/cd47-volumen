@@ -1710,7 +1710,7 @@ function rxmCarga(P){
   for(const [s,info] of mm.map){
     const curMin=isNaN(info.min)?0:info.min,curMax=isNaN(info.max)?0:info.max,r=sel.get(s);
     if(r){const mn=Math.min(Math.max(curMin,Math.floor(r.sIni)+1),curMax);
-      if(mn!==curMin){rows.push([s,Math.round(mn),Math.round(curMax),'','',info.grp||''])}cambian++}
+      if(curMax>0){rows.push([s,Math.round(mn),Math.round(curMax),'','',info.grp||''])}cambian++}
     else if(curMin>0||curMax>0){rows.push([s,0,0,'','',info.grp||''])}ceros+=(r?0:1)}
   rows.sort((a,b)=>a[0]-b[0]);
   return {H:['producto','minStock','maxStock','diasCedi','diasProveedor','grupo'],rows,n:sel.size,ceros:rows.filter(r=>r[1]===0&&r[2]===0).length};
