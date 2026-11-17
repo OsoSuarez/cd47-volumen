@@ -1576,6 +1576,8 @@ function planRXM(C){
     if(sinMM)mxS=cb(Math.max(d[0],d[0]+(nD>1?d[1]:0)+(nD>2?d[2]:0)));
     else if(d[0]>mxS)mxS=cb(d[0]);
     if(!sinMM&&info.max<=mnV)mxS=Math.max(mxS,cb(d[0]+(nD>1?d[1]:0)),mnV+batch);
+    if(sinMM)mxS=Math.max(mxS,2*batch);
+    mxS=cb(mxS);
     items.push({s,name:sk.name||info.name||'',grp:info.grp||'',pool,temp,d,min:mnV,max:mxS,maxV:sinMM?0:info.max,sinMM,batch,S:+(STK[String(s)]||0),A:+(ALM[String(s)]||0)});
   }
   const capT={secos:C.capS,frio:C.capF},capH={secos:Math.floor(C.capS*(1+tol)+1e-9),frio:Math.floor(C.capF*(1+tol)+1e-9)};
@@ -1616,16 +1618,18 @@ function planRXM(C){
   }
   return {D,out,lista,dayTot,items,cap:capT,capH,tol,fr,capAt,capHAt};
 }
+// Min sugerido: por encima del stock para que dispare, multiplo del batch y menor al Max
+function rxmMin(r){const b=r.it.batch||1,nm=r.it.max;let mn=Math.ceil((Math.max(r.it.sinMM?0:r.it.min,Math.floor(r.sIni)+1))/b-1e-9)*b;if(mn>=nm)mn=Math.max(b,nm-b);return mn}
 // archivo de carga del dia 0: elegidos con su Min/Max (Min por encima del stock para que dispare), el resto en 0/0
 function rxmCarga(P){
   const sel=new Map();for(const r of P.lista[0])sel.set(r.it.s,r);
   const rows=[];let ceros=0,cambian=0;
   for(const [s,info] of mm.map){
     const curMin=isNaN(info.min)?0:info.min,curMax=isNaN(info.max)?0:info.max,r=sel.get(s);
-    if(r){if(r.it.sinMM)continue;const nm=r.it.max,mn=Math.min(Math.max(curMin,Math.floor(r.sIni)+1),nm);
+    if(r){if(r.it.sinMM)continue;const nm=r.it.max,mn=rxmMin(r);
       if(nm>0){rows.push([s,Math.round(mn),Math.round(nm),'','',''])}cambian++}
     else if(curMin>0||curMax>0){rows.push([s,0,0,'','',''])}ceros+=(r?0:1)}
-  for(const [s,r] of sel){if(r.it.sinMM){const nm=r.it.max;rows.push([s,Math.round(Math.min(Math.floor(r.sIni)+1,nm)),Math.round(nm),'','',''])}}
+  for(const [s,r] of sel){if(r.it.sinMM){const nm=r.it.max;rows.push([s,Math.round(rxmMin(r)),Math.round(nm),'','',''])}}
   rows.sort((a,b)=>a[0]-b[0]);
   return {H:['producto','minStock','maxStock','diasCedi','diasProveedor','grupo'],rows,n:sel.size,ceros:rows.filter(r=>r[1]===0&&r[2]===0).length};
 }
@@ -1652,8 +1656,8 @@ function renderRxm(){
   $('#rxmNote').textContent=(nUp?`⚠ ${nUp} SKUs con Min/Max sugerido (↑ o “sin Min/Max”): subí o cargá el Max en la V L (demanda mayor al Max, Max ≤ Min o SKU sin Min/Max). La carga CSV ya los trae con el valor nuevo. `:'')+(rxmDia===0?'Carga de hoy: stock real de picking y almacenamiento + demanda del día (TR real si ya está cargado).':'Proyección: el stock de este día sale de la simulación de los días anteriores; solo se carga la lista de hoy.');
   const fl=($('#rxmF')||{}).value||'all';
   const L=P.lista[rxmDia].filter(r=>fl==='up'?r.it.max>r.it.maxV:fl==='sin'?r.it.sinMM:true).sort((a,b)=>(a.tipo===b.tipo?0:a.tipo==='Obligatorio'?-1:1)||(a.it.pool<b.it.pool?-1:1)||a.sIni/(a.dd||1)-b.sIni/(b.dd||1));
-  let t='<thead><tr><th class="l">SKU</th><th class="l">Producto</th><th class="l">Grupo</th><th class="l">Pool</th><th class="l">Tipo</th><th>Stock picking</th><th>Demanda día</th><th>Mover a picking</th><th>Min V L</th><th>Max V L</th><th>Max sugerido</th></tr></thead><tbody>';
-  for(const r of L.slice(0,1500))t+=`<tr><td class="l mono">${r.it.s}</td><td class="l nm" title="${esc(r.it.name)}">${esc(r.it.name)}</td><td class="l">${esc(r.it.grp)}</td><td class="l">${r.it.pool}</td><td class="l" style="color:${r.tipo==='Obligatorio'?'#ffd34d':'#8ec5ff'}">${r.tipo}${r.it.sinMM?' · sin Min/Max':''}</td><td>${f0(r.sIni)}</td><td>${f0(r.dd)}</td><td><b>${f0(r.q)}</b></td><td>${f0(r.it.min)}</td><td>${f0(r.it.maxV)}</td><td style="${r.it.max>r.it.maxV?'color:#ffd34d;font-weight:700':''}">${f0(r.it.max)}${r.it.max>r.it.maxV?' ↑':''}</td></tr>`;
+  let t='<thead><tr><th class="l">SKU</th><th class="l">Producto</th><th class="l">Grupo</th><th class="l">Pool</th><th class="l">Tipo</th><th>Stock picking</th><th>Demanda día</th><th>Mover a picking</th><th>Min V L</th><th>Max V L</th><th>Min sugerido</th><th>Max sugerido</th><th>Batch</th></tr></thead><tbody>';
+  for(const r of L.slice(0,1500))t+=`<tr><td class="l mono">${r.it.s}</td><td class="l nm" title="${esc(r.it.name)}">${esc(r.it.name)}</td><td class="l">${esc(r.it.grp)}</td><td class="l">${r.it.pool}</td><td class="l" style="color:${r.tipo==='Obligatorio'?'#ffd34d':'#8ec5ff'}">${r.tipo}${r.it.sinMM?' · sin Min/Max':''}</td><td>${f0(r.sIni)}</td><td>${f0(r.dd)}</td><td><b>${f0(r.q)}</b></td><td>${f0(r.it.min)}</td><td>${f0(r.it.maxV)}</td><td>${f0(rxmMin(r))}</td><td style="${r.it.max>r.it.maxV?'color:#ffd34d;font-weight:700':''}">${f0(r.it.max)}${r.it.max>r.it.maxV?' ↑':''}</td><td>${f0(r.it.batch)}</td></tr>`;
   $('#rxmTab').innerHTML=t+'</tbody>';
 }
 $('#rxmF').onchange=()=>renderRxm();
