@@ -1522,6 +1522,12 @@ function simRunRXX(C,ov){
 // hasta capacidad + tolerancia; 2) adelantos con lo que sobra de la capacidad, ordenados por
 // reabastos futuros evitados. El resto de la V L queda en 0/0.
 function rxmTolPct(){const e=document.getElementById('rxmTol');const v=e?parseFloat(e.value):NaN;return isNaN(v)||v<0?10:v}
+// turno de reabasto 22:00-06:00 (hora Buenos Aires): el dia 0 solo tiene la capacidad que queda del turno
+function shiftFrac(){
+  try{const p=new Intl.DateTimeFormat('en-GB',{timeZone:'America/Argentina/Buenos_Aires',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date());
+    const h=+p.find(x=>x.type==='hour').value%24,m=+p.find(x=>x.type==='minute').value,t=h+m/60;
+    const el=t>=22?t-22:(t<6?t+2:0);return Math.max(0,Math.min(1,(8-el)/8))}catch(e){return 1}
+}
 function planRXM(C){
   const D=agg.dates,nD=D.length,H=7,raw=new Map();
   for(let i=0;i<agg.M.q.length;i++){const s=agg.M.s[i];let r=raw.get(s);if(!r){r=new Float64Array(nD);raw.set(s,r)}r[agg.M.d[i]]+=agg.M.q[i]}
@@ -1542,6 +1548,7 @@ function planRXM(C){
     items.push({s,name:sk.name||info.name||'',grp:info.grp||'',pool,temp,d,min:mnV,max:mxS,maxV:sinMM?0:info.max,sinMM,batch,S:+(STK[String(s)]||0),A:+(ALM[String(s)]||0)});
   }
   const capT={secos:C.capS,frio:C.capF},capH={secos:Math.floor(C.capS*(1+tol)+1e-9),frio:Math.floor(C.capF*(1+tol)+1e-9)};
+  const fr=shiftFrac(),capAt=(j,p)=>j===0?Math.floor(capT[p]*fr+1e-9):capT[p],capHAt=(j,p)=>j===0?Math.floor(capT[p]*fr*(1+tol)+1e-9):capH[p];
   const fill=it=>{let q=Math.min(it.max-it.S,it.A);if(q<=0)return 0;const b=it.batch;if(q>=b)q=Math.floor(q/b+1e-9)*b;return Math.max(0,q)};
   const need=(S,Dh,mx)=>mx>0?Math.max(0,Math.ceil(Math.max(0,Dh-S)/mx-1e-9)):0;
   const out=[],lista=[],dayTot=new Float64Array(nD);
@@ -1551,10 +1558,10 @@ function planRXM(C){
       const P=items.filter(it=>it.pool===p),done=new Set();let used=0,over=0,nObl=0,nAd=0;
       const obl=P.filter(it=>it.d[j]>0&&it.S<it.d[j]&&it.A>0).sort((a,b)=>a.S/a.d[j]-b.S/b.d[j]);
       for(const it of obl){
-        if(used>=capH[p]){over++;continue}
+        if(used>=capHAt(j,p)){over++;continue}
         const q=fill(it);if(q<=0)continue;
         L.push({it,q,tipo:'Obligatorio',sIni:it.S,dd:it.d[j]});it.S+=q;it.A-=q;used++;nObl++;done.add(it.s)}
-      if(used<capT[p]){
+      if(used<capAt(j,p)){
         const cand=[];
         for(const it of P){
           if(done.has(it.s)||it.A<=0||it.S>=it.max)continue;
@@ -1568,15 +1575,15 @@ function planRXM(C){
         }
         cand.sort((a,b)=>b.ahorro-a.ahorro||a.cover-b.cover);
         for(const c of cand){
-          if(used>=capT[p])break;const it=c.it,q=fill(it);if(q<=0)continue;
+          if(used>=capAt(j,p))break;const it=c.it,q=fill(it);if(q<=0)continue;
           L.push({it,q,tipo:'Adelanto',sIni:it.S,dd:it.d[j]});it.S+=q;it.A-=q;used++;nAd++}
       }
-      day[p]={req:used+over,ej:used,pend:over,cap:capT[p],obl:nObl,adel:nAd,over};
+      day[p]={req:used+over,ej:used,pend:over,cap:capAt(j,p),obl:nObl,adel:nAd,over};
     }
     for(const it of items){dayTot[j]+=it.d[j];it.S=Math.max(0,it.S-it.d[j])}
     out.push(day);lista.push(L);
   }
-  return {D,out,lista,dayTot,items,cap:capT,capH,tol};
+  return {D,out,lista,dayTot,items,cap:capT,capH,tol,fr,capAt,capHAt};
 }
 // archivo de carga del dia 0: elegidos con su Min/Max (Min por encima del stock para que dispare), el resto en 0/0
 function rxmCarga(P){
@@ -1598,17 +1605,17 @@ function renderRxm(){
   if(rxmDia>=nD)rxmDia=0;
   $('#rxmDias').innerHTML=P.D.map((d,j)=>`<button class="${j===rxmDia?'y':''}" data-j="${j}">${j===0?'Hoy · ':''}${fmtD(d)}</button>`).join('');
   $('#rxmDias').querySelectorAll('button').forEach(b=>b.onclick=()=>{rxmDia=+b.dataset.j;renderRxm()});
-  const o=P.out[rxmDia],tS=o.secos.ej,tF=o.frio.ej,cap=C.capS+C.capF,capHt=P.capH.secos+P.capH.frio;
+  const o=P.out[rxmDia],tS=o.secos.ej,tF=o.frio.ej,cS=P.capAt(rxmDia,'secos'),cF=P.capAt(rxmDia,'frio'),hS=P.capHAt(rxmDia,'secos'),hF=P.capHAt(rxmDia,'frio'),cap=cS+cF,capHt=hS+hF;
   const col=(n,c,h)=>n>h?'#ff9d97':(n>c?'#ffd34d':'#9fe0a8');
   $('#rxmKpis').innerHTML=[
-    ['Tareas del día',nf.format(tS+tF),`capacidad ${nf.format(cap)} · tope con tolerancia ${nf.format(capHt)}`,col(tS+tF,cap,capHt)],
-    ['Secos',nf.format(tS),`${nf.format(o.secos.obl)} obligatorios + ${nf.format(o.secos.adel)} adelantos · cap ${nf.format(C.capS)} (${nf.format(P.capH.secos)})`,col(tS,C.capS,P.capH.secos)],
-    ['Frío',nf.format(tF),`${nf.format(o.frio.obl)} obligatorios + ${nf.format(o.frio.adel)} adelantos · cap ${nf.format(C.capF)} (${nf.format(P.capH.frio)})`,col(tF,C.capF,P.capH.frio)],
+    ['Tareas del día',nf.format(tS+tF),`capacidad ${nf.format(cap)}${rxmDia===0&&P.fr<1?` (turno 22–06: queda el ${Math.round(P.fr*100)}%)`:''} · tope con tolerancia ${nf.format(capHt)}`,col(tS+tF,cap,capHt)],
+    ['Secos',nf.format(tS),`${nf.format(o.secos.obl)} obligatorios + ${nf.format(o.secos.adel)} adelantos · cap ${nf.format(cS)} (${nf.format(hS)})`,col(tS,cS,hS)],
+    ['Frío',nf.format(tF),`${nf.format(o.frio.obl)} obligatorios + ${nf.format(o.frio.adel)} adelantos · cap ${nf.format(cF)} (${nf.format(hF)})`,col(tF,cF,hF)],
     ['Obligatorios sin cubrir',nf.format(o.secos.over+o.frio.over),'no entran ni con la tolerancia',(o.secos.over+o.frio.over)>0?'#ff9d97':'#9fe0a8']
   ].map(([l,v,s,c])=>`<div class="kpi"><div class="l">${l}</div><div class="v" style="color:${c}">${v}</div><div class="s">${s}</div></div>`).join('');
   let h='<table><thead><tr><th class="l">Día</th><th>Secos<br><span style="font-weight:400;color:#7f8994">oblig + adel</span></th><th>Frío<br><span style="font-weight:400;color:#7f8994">oblig + adel</span></th><th>Total</th><th>vs cap.</th><th>Sin cubrir</th></tr></thead><tbody>';
-  P.D.forEach((d,j)=>{const x=P.out[j],t=x.secos.ej+x.frio.ej;
-    h+=`<tr${j===rxmDia?' style="background:#2a2536"':''}><td class="l">${fmtD(d)}</td><td>${x.secos.obl} + ${x.secos.adel}</td><td>${x.frio.obl} + ${x.frio.adel}</td><td><b>${nf.format(t)}</b></td><td style="color:${col(t,cap,capHt)}">${nf.format(Math.round(t/cap*100))}%</td><td>${x.secos.over+x.frio.over||'—'}</td></tr>`});
+  P.D.forEach((d,j)=>{const x=P.out[j],t=x.secos.ej+x.frio.ej,cap=P.capAt(j,'secos')+P.capAt(j,'frio'),capHt=P.capHAt(j,'secos')+P.capHAt(j,'frio');
+    h+=`<tr${j===rxmDia?' style="background:#2a2536"':''}><td class="l">${fmtD(d)}</td><td>${x.secos.obl} + ${x.secos.adel}</td><td>${x.frio.obl} + ${x.frio.adel}</td><td><b>${nf.format(t)}</b></td><td style="color:${col(t,cap,capHt)}">${nf.format(Math.round(t/(cap||1)*100))}%</td><td>${x.secos.over+x.frio.over||'—'}</td></tr>`});
   $('#rxmSem').innerHTML=h+'</tbody></table>';
   const nUp=P.lista[rxmDia].filter(r=>r.it.max>r.it.maxV).length;
   $('#rxmNote').textContent=(nUp?`⚠ ${nUp} SKUs con Min/Max sugerido (↑ o “sin Min/Max”): subí o cargá el Max en la V L (demanda mayor al Max, Max ≤ Min o SKU sin Min/Max). La carga CSV ya los trae con el valor nuevo. `:'')+(rxmDia===0?'Carga de hoy: stock real de picking y almacenamiento + demanda del día (TR real si ya está cargado).':'Proyección: el stock de este día sale de la simulación de los días anteriores; solo se carga la lista de hoy.');
