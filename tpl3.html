@@ -1585,9 +1585,9 @@ function rxmCarga(P){
   for(const [s,info] of mm.map){
     const curMin=isNaN(info.min)?0:info.min,curMax=isNaN(info.max)?0:info.max,r=sel.get(s);
     if(r){if(r.it.sinMM)continue;const nm=r.it.max,mn=Math.min(Math.max(curMin,Math.floor(r.sIni)+1),nm);
-      if(nm>0){rows.push([s,Math.round(mn),Math.round(nm),'','',info.grp||''])}cambian++}
-    else if(curMin>0||curMax>0){rows.push([s,0,0,'','',info.grp||''])}ceros+=(r?0:1)}
-  for(const [s,r] of sel){if(r.it.sinMM){const nm=r.it.max;rows.push([s,Math.round(Math.min(Math.floor(r.sIni)+1,nm)),Math.round(nm),'','',r.it.grp||''])}}
+      if(nm>0){rows.push([s,Math.round(mn),Math.round(nm),'','',''])}cambian++}
+    else if(curMin>0||curMax>0){rows.push([s,0,0,'','',''])}ceros+=(r?0:1)}
+  for(const [s,r] of sel){if(r.it.sinMM){const nm=r.it.max;rows.push([s,Math.round(Math.min(Math.floor(r.sIni)+1,nm)),Math.round(nm),'','',''])}}
   rows.sort((a,b)=>a[0]-b[0]);
   return {H:['producto','minStock','maxStock','diasCedi','diasProveedor','grupo'],rows,n:sel.size,ceros:rows.filter(r=>r[1]===0&&r[2]===0).length};
 }
