@@ -1529,16 +1529,17 @@ function shiftFrac(){
     const el=t>=22?t-22:(t<6?t+2:0);return Math.max(0,Math.min(1,(8-el)/8))}catch(e){return 1}
 }
 function planRXM(C){
-  const D=agg.dates,nD=D.length,H=7,raw=new Map();
-  for(let i=0;i<agg.M.q.length;i++){const s=agg.M.s[i];let r=raw.get(s);if(!r){r=new Float64Array(nD);raw.set(s,r)}r[agg.M.d[i]]+=agg.M.q[i]}
+  const DA=agg.dates,nDA=DA.length,hoyD=hoyBA();let j0=0;while(j0<nDA-1&&DA[j0]<hoyD)j0++;
+  const D=DA.slice(j0),nD=D.length,H=7,raw=new Map();
+  for(let i=0;i<agg.M.q.length;i++){const s=agg.M.s[i];let r=raw.get(s);if(!r){r=new Float64Array(nDA);raw.set(s,r)}r[agg.M.d[i]]+=agg.M.q[i]}
   const poolOf=t=>t==='Ambiente'?'secos':(t==='Refrigerado'||t==='Congelado')?'frio':t==='Fruver'?(C.fr==='frio'?'frio':'secos'):null;
   const tol=rxmTolPct()/100,items=[];
   for(const [s,r0] of raw){
     const info0=mm.map.get(s),sinMM=!info0||!(info0.max>0),info=info0||{grp:'',min:NaN,max:NaN,emp:NaN,name:''};
     const sk=skus.get(s)||{};const temp=sk.temp||'Sin dato';const pool=poolOf(temp);if(!pool)continue;
-    const present=[];for(let j=0;j<nD;j++)if(agg.dT[j].has(temp))present.push(j);
+    const present=[];for(let j=0;j<nDA;j++)if(agg.dT[j].has(temp))present.push(j);
     const avg=present.length?present.reduce((a,j)=>a+r0[j],0)/present.length:0;
-    const d=new Float64Array(nD);for(let j=0;j<nD;j++)d[j]=(agg.dT[j].has(temp)?r0[j]:avg)*Math.pow(1+C.g,j);
+    const df=new Float64Array(nDA);for(let j=j0;j<nDA;j++)df[j]=(agg.dT[j].has(temp)?r0[j]:avg)*Math.pow(1+C.g,j-j0);const d=df.subarray(j0);
     const batch=(sk.batch>0)?sk.batch:(info.emp>0?info.emp:1);
     const cb=x=>Math.ceil(x/batch-1e-9)*batch,mnV=isNaN(info.min)?0:info.min;
     let mxS=sinMM?0:info.max;
