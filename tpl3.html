@@ -2226,7 +2226,7 @@ function renderSem(C){
   const peor=P.cola>H.cola||P.falt>H.falt*1.05||propT>actT;
   const fila=(n,x,extra)=>`<tr><td class="l">${n}</td><td>${nf.format(x.ej)}${extra||''}</td><td>${nf.format(x.cola)}</td><td>${x.dias} de ${R.nD}</td><td>${nf.format(Math.round(x.falt))}</td></tr>`;
   W.innerHTML=
-    (!RXm&&R.resto?`<div class="warn" style="border-color:#4a3a7a;background:#1c1830;color:#c9b8ff"><b>Para Copérnico (RXM):</b> se cargan solo los <b>${nf.format(R.sku.length)} SKUs aconsejados</b> con su Min y Max. Los otros <b>${nf.format(R.resto.length)} SKUs</b> de la V L van en <b>Min 0 / Max 0</b> (${nf.format(R.resto.filter(r=>r.acc==='Poner en 0').length)} tienen hoy algún valor y hay que ponerlos en cero). Usá “Copiar para Copérnico”.</div>`:'')+
+    (!RXm?`<div class="warn" style="border-color:#4a3a7a;background:#1c1830;color:#c9b8ff"><b>Para cargar en Copérnico (RXM) usá la solapa Carga RXM.</b> Esta pantalla es solo una proyección semanal; la lista diaria de Min/Max sale de Carga RXM.</div>`:'')+
     (peor?`<div class="warn" style="border-color:#5a2a2a;background:#2a1818"><b>⚠ No cargar esta propuesta.</b> En el simulador diario sale peor que la configuración de hoy${P.cola>H.cola?': deja más cola':''}${P.falt>H.falt*1.05?', más faltante en picking':''}${propT>actT?', y genera más reabastos':''}. Probá con otro valor de “Min cubre”.</div>`
          :`<div class="warn" style="border-color:#24502f;background:#16241b;color:#9fe0a8">✔ La propuesta pasa la prueba del simulador diario: no deja más cola ni más faltante que la configuración de hoy.</div>`)+
     (invMenor?`<div class="warn"><b>Max por debajo del Min: ${nf.format(invMenor)} SKUs en la V L.</b> Es un error de carga: el sistema no puede reponer bien. Marcados como Corregir.</div>`:'')+
@@ -2435,7 +2435,7 @@ function aplicarModeloUI(){
     ?'<b>RXX · mínimo + demanda.</b> Cuando la demanda del día supera al inventario de picking, se dispara un reabasto de <b>demanda + Min − stock</b> y después de pickear queda el Min. Solo se configura el <b>Min</b> (el Max no se usa): a más Min, menos reabastos. Arranca con el stock real de picking.'
     :'<b>RXM · mínimo y máximo.</b> Cuando el inventario de picking llega al <b>Min</b> o por debajo, se dispara y repone hasta el <b>Max</b> configurado. Se configuran Min y Max: a más ciclo (Max − Min), menos reabastos.';
   const sa=$('#semA');for(const o of sa.options){if(['corto','cortoPico','minmax','cero'].includes(o.value))o.hidden=o.disabled=RX}
-  $('#semCop').hidden=$('#semCopCsv').hidden=RX;
+  $('#semCop').hidden=$('#semCopCsv').hidden=RX;if(!RX)$('#semCop').hidden=$('#semCopCsv').hidden=true;$('#semCarga').hidden=$('#semCargaDl').hidden=!RX&&false;if(!RX)$('#semCarga').hidden=$('#semCargaDl').hidden=true;
   if(RX&&['corto','cortoPico','minmax','cero'].includes(sa.value))sa.value='acc';
   $('#semUp').textContent=RX?'Copiar Min':'Copiar Min/Max';
 }
