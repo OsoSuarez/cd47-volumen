@@ -2141,14 +2141,14 @@ function renderSem(C){
     ['Reabastos hoy (V L)',nf.format(Math.round(actT)),RXm?`sin contar ${nf.format(invHoy)} SKUs sin Min en la V L`:R.v2&&R.noEntra?`con el Max recortado a lo que entra en ${nf.format(R.noEntra)} SKUs (sin recortar: ${nf.format(Math.round(R.reabRaw))}) · sin contar ${nf.format(invHoy)} con Max ≤ Min`:`sin contar ${nf.format(invHoy)} SKUs con Max ≤ Min`],
     ['Con la propuesta',nf.format(Math.round(propT)),(propT>capT?`${nf.format(Math.round(propT-capT))} por encima de la capacidad semanal`:'entra en la capacidad semanal')+` · ${R.simProp.dias} de ${R.nD} días se pasan`],
     ['Diferencia',(propT<=actT?'−':'+')+nf.format(Math.round(Math.abs(actT-propT))),propT<=actT?'menos reabastos, y cubre también los SKUs sin ciclo':'MÁS reabastos que hoy'],
-  ].map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
+  ].filter((_,i)=>RXm||i<2).map(([l,v,s])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
 
   const H=R.simHoy,P=R.simProp;
   const peor=P.cola>H.cola||P.falt>H.falt*1.05||propT>actT;
   const fila=(n,x,extra)=>`<tr><td class="l">${n}</td><td>${nf.format(x.ej)}${extra||''}</td><td>${nf.format(x.cola)}</td><td>${x.dias} de ${R.nD}</td><td>${nf.format(Math.round(x.falt))}</td></tr>`;
   W.innerHTML=
     (!RXm?`<div class="warn" style="border-color:#4a3a7a;background:#1c1830;color:#c9b8ff"><b>Para cargar en Copérnico (RXM) usá la solapa Carga RXM.</b> Esta pantalla es solo una proyección semanal; la lista diaria de Min/Max sale de Carga RXM.</div>`:'')+
-    (peor?`<div class="warn" style="border-color:#5a2a2a;background:#2a1818"><b>⚠ No cargar esta propuesta.</b> En el simulador diario sale peor que la configuración de hoy${P.cola>H.cola?': deja más cola':''}${P.falt>H.falt*1.05?', más faltante en picking':''}${propT>actT?', y genera más reabastos':''}. Probá con otro valor de “Min cubre”.</div>`
+    (!RXm?'':peor?`<div class="warn" style="border-color:#5a2a2a;background:#2a1818"><b>⚠ No cargar esta propuesta.</b> En el simulador diario sale peor que la configuración de hoy${P.cola>H.cola?': deja más cola':''}${P.falt>H.falt*1.05?', más faltante en picking':''}${propT>actT?', y genera más reabastos':''}. Probá con otro valor de “Min cubre”.</div>`
          :`<div class="warn" style="border-color:#24502f;background:#16241b;color:#9fe0a8">✔ La propuesta pasa la prueba del simulador diario: no deja más cola ni más faltante que la configuración de hoy.</div>`)+
     (invMenor?`<div class="warn"><b>Max por debajo del Min: ${nf.format(invMenor)} SKUs en la V L.</b> Es un error de carga: el sistema no puede reponer bien. Marcados como Corregir.</div>`:'')+
     (invIgual?`<div class="warn" style="border-color:#7a5a1e;background:#2a2312;color:#ffd99a"><b>Min igual al Max: ${nf.format(invIgual)} SKUs en la V L.</b> No hay ciclo: cada vez que baja un poco hay que reponer. Marcados como Corregir.</div>`:'')+
