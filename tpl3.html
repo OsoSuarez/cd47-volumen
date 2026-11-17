@@ -2417,7 +2417,7 @@ function demHoyTxt(){return demHoy?`<b>Demanda del ${fmtD(demHoy.fecha)} = TR re
 // navegador ya hay una carga mas nueva del mismo dia, esa gana.
 function trvPublicado(){return fetch('trv.json?v='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null).then(P=>{
   if(!P||!P.tr)return;
-  for(const [d,T] of Object.entries(P.tr)){const L=trv.tr[d];if(!L||(T.at||0)>(L.at||0)){T.pub=true;trv.tr[d]=T}}
+  for(const [d,T] of Object.entries(P.tr)){const L=trv.tr[d];if(trv.borrados&&trv.borrados[d]&&(T.at||0)<=trv.borrados[d])continue;if(!L||(T.at||0)>(L.at||0)){T.pub=true;trv.tr[d]=T}}
   for(const [s,n] of Object.entries(P.names||{}))if(!trv.names[s])trv.names[s]=n})}
 snapTx('readonly',st=>st.get(TRV_K)).catch(()=>null).then(v=>{if(v&&v.tr)trv=v;return trvPublicado()}).then(()=>{trvListo=true;if(trvPend)trvPlanDesdeAgg();try{aplicarTRHoy()}catch(e){console.warn('trvHoy',e)}trvRender()});
 // Lo llama recompute: copia lo que el plan cargado dice para cada fecha.
@@ -2482,7 +2482,7 @@ trvDrop.addEventListener('drop',e=>trvAgregar([...e.dataTransfer.files]));
 $('#trvDia').onchange=e=>{trvSel=e.target.value;trvRender()};
 $('#trvPlan').onchange=$('#trvQ').onchange=$('#trvF').onchange=()=>trvRender();
 let trvQt;$('#trvQs').oninput=()=>{clearTimeout(trvQt);trvQt=setTimeout(trvSkuTbl,150)};
-$('#trvBorrar').onclick=async()=>{if(!trvSel||!trv.tr[trvSel])return;delete trv.tr[trvSel];trvSel=null;await trvGuardar();try{aplicarTRHoy()}catch(e){console.warn('trvHoy',e)}trvRender();toast('Día borrado')};
+$('#trvBorrar').onclick=async()=>{if(!trvSel||!trv.tr[trvSel])return;trv.borrados=trv.borrados||{};trv.borrados[trvSel]=Date.now();delete trv.tr[trvSel];trvSel=null;await trvGuardar();try{aplicarTRHoy()}catch(e){console.warn('trvHoy',e)}trvRender();toast('Día borrado')};
 function trvPlanes(d){const v=trv.plan[d]||{};return Object.keys(v).sort()}
 // Compara un día. ref = fecha de inicio del plan usado; qi = 0 ordered, 1 picked, 2 delivered.
 function trvComparar(d,ref,qi){
