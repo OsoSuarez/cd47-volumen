@@ -2252,7 +2252,10 @@ function renderSim(){
   if(!agg||!agg.dates.length||!mm){KP.innerHTML='';W.innerHTML='';DT.innerHTML='<tr><td class="empty">Cargá el plan y la V L para correr el simulador.</td></tr>';TP.innerHTML='';return}
   if(!simInit){simInit=true}
   mmCalc();
-  const C=simCfg();const R=simRun(C,'vl');const nD=R.D.length;
+  const C=simCfg();const R=simRun(C,'vl');
+  // RXM: las barras de hoy salen del mismo calculo que Carga RXM (obligatorios = picking < demanda del dia, TR real, desde hoy)
+  if(MODELO==='RXM'){try{const P0=planRXM(C);R.D=P0.D;R.out=P0.out;R.dayTot=P0.dayTot}catch(e){console.error('simRXM',e)}}
+  const nD=R.D.length;
   // Propuesta (los Min/Max recomendados en la tabla de abajo), dia por dia.
   try{renderSem(C)}catch(e){console.error('renderSem',e);$('#semWarn').innerHTML='<div class="warn">No se pudo calcular el reabasto semanal: '+esc(e.message)+'</div>'}
   const PO=semR&&semR.spOut&&semR.spOut.length===nD?semR.spOut:null;
