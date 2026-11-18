@@ -1,7 +1,12 @@
 @echo off
 chcp 65001 >nul
-echo Programando el servidor del boton "Ejecutar bot": se inicia solo al abrir sesion en Windows...
-schtasks /Create /TN "Servidor Bot F9 CD47" /TR "pythonw C:\Users\jorge.suarez\cd47-volumen\fountain9\servidor_bot.py" /SC ONLOGON /RL LIMITED /F
-echo.
-echo Listo. Desde la proxima vez que inicies sesion el boton funciona solo. Para usarlo ahora, ejecuta servidor_bot.bat
+echo Instalando el servidor del boton "Ejecutar bot" en el inicio de Windows (sin permisos de admin)...
+set "ST=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
+> "%ST%\servidor_bot_cd47.vbs" echo CreateObject("WScript.Shell").Run "cmd /c cd /d C:\Users\jorge.suarez\cd47-volumen && pythonw fountain9\servidor_bot.py", 0, False
+if exist "%ST%\servidor_bot_cd47.vbs" (
+  echo OK: instalado. Desde el proximo inicio de sesion el servidor se prende solo.
+  echo Para prenderlo ahora sin reiniciar, ejecuta servidor_bot.bat
+) else (
+  echo ERROR: no se pudo crear el archivo en %ST%
+)
 pause
