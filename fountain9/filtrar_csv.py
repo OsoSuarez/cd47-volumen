@@ -42,7 +42,7 @@ def main():
     # "plan_2_All - Fixed Schedule...". El glob viejo exigia que el nombre
     # EMPEZARA con "All - ", asi que no los encontraba y filtraba planes viejos.
     def mas_nuevo(patron):
-        hits = sorted(OUT.glob(patron), key=lambda p: p.stat().st_mtime)
+        hits = sorted(OUT.glob(patron), key=lambda p: p.name)  # el nombre lleva la fecha/hora del plan
         return hits[-1] if hits else None
 
     secos_path = mas_nuevo("plan_1_*Fixed Schedule Replenishment Plan*.csv")

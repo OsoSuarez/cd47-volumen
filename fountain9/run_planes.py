@@ -329,8 +329,27 @@ def download_last_two(page):
         page.wait_for_timeout(1500)
 
 
+def usar_archivos_locales():
+    """Modo local: usa los 2 CSV de plan que ya estan en descargas/ (bajados a mano de Fountain9).
+    Toma los 2 mas nuevos por la fecha del nombre; el primero es Secos y el segundo RyC (como los baja el bot)
+    y los renombra a plan_1_ / plan_2_ para que el resto del pipeline los encuentre."""
+    hits = [c for c in OUT.glob("*Fixed Schedule Replenishment Plan*.csv")
+            if not c.name.startswith(("plan_", "filtrado_"))]
+    hits.sort(key=lambda c: c.name)
+    if len(hits) < 2:
+        raise SystemExit("ERROR: no encontre 2 archivos 'All - Fixed Schedule Replenishment Plan ...csv' sin renombrar en descargas/")
+    s, r = hits[-2], hits[-1]
+    for i, c in ((1, s), (2, r)):
+        d = c.with_name(f"plan_{i}_{c.name}")
+        c.rename(d)
+        print(f"  {'Secos' if i == 1 else 'RyC'}: {d.name} ({d.stat().st_size // 1_000_000} MB)")
+
+
 def main():
     OUT.mkdir(exist_ok=True)
+    if os.environ.get("F9_SOLO_LOCAL") == "1":
+        usar_archivos_locales()
+        return
     if os.environ.get("F9_SOLO_BAJAR") == "1":
         # Los planes ya estan creados: solo bajarlos y subirlos al tablero.
         with sync_playwright() as p:
