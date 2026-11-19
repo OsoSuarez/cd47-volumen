@@ -337,7 +337,8 @@ def usar_archivos_locales():
             if not c.name.startswith(("plan_", "filtrado_"))]
     hits.sort(key=lambda c: c.name)
     if len(hits) < 2:
-        raise SystemExit("ERROR: no encontre 2 archivos 'All - Fixed Schedule Replenishment Plan ...csv' sin renombrar en descargas/")
+        print("  No hay 2 archivos sin renombrar: uso los plan_*.csv que ya estan en descargas/")
+        return
     s, r = hits[-2], hits[-1]
     for i, c in ((1, s), (2, r)):
         d = c.with_name(f"plan_{i}_{c.name}")

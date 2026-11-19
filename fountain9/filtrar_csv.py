@@ -41,21 +41,23 @@ def main():
     # run_planes.py guarda los planes como "plan_1_All - Fixed Schedule..." y
     # "plan_2_All - Fixed Schedule...". El glob viejo exigia que el nombre
     # EMPEZARA con "All - ", asi que no los encontraba y filtraba planes viejos.
-    def mas_nuevo(patron):
-        hits = sorted(OUT.glob(patron), key=lambda p: p.name)  # el nombre lleva la fecha/hora del plan
-        return hits[-1] if hits else None
-
-    secos_path = mas_nuevo("plan_1_*Fixed Schedule Replenishment Plan*.csv")
-    ryc_path   = mas_nuevo("plan_2_*Fixed Schedule Replenishment Plan*.csv")
-
-    if not (secos_path and ryc_path):
-        # Respaldo: nombres viejos, los dos mas recientes por fecha de modificacion.
-        csvs = sorted(OUT.glob("*Fixed Schedule Replenishment Plan*.csv"),
-                      key=lambda p: p.stat().st_mtime)
-        csvs = [c for c in csvs if not c.name.startswith("filtrado_")]
-        if len(csvs) < 2:
-            sys.exit(f"ERROR: se esperaban 2 CSV de plan en {OUT}/, se encontraron {len(csvs)}")
-        secos_path, ryc_path = csvs[-2], csvs[-1]
+    # Se ignora el prefijo plan_1_/plan_2_ (puede venir cruzado): se toman los 2 planes mas nuevos
+    # por la fecha/hora del nombre y el MAS GRANDE es Secos, el mas chico es RyC.
+    import re
+    def clave(p):
+        m = re.search(r"(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})", p.name)
+        return m.group(1) if m else ""
+    csvs = [c for c in OUT.glob("*Fixed Schedule Replenishment Plan*.csv") if not c.name.startswith("filtrado_")]
+    porplan = {}
+    for c in csvs:
+        k = clave(c)
+        if k and (k not in porplan or c.stat().st_size > porplan[k].stat().st_size):
+            porplan[k] = c
+    ult = sorted(porplan)[-2:]
+    if len(ult) < 2:
+        sys.exit(f"ERROR: se esperaban 2 planes distintos en {OUT}/, se encontraron {len(ult)}")
+    a, b = porplan[ult[0]], porplan[ult[1]]
+    secos_path, ryc_path = (a, b) if a.stat().st_size >= b.stat().st_size else (b, a)
     print(f"Secos: {secos_path.name}")
     print(f"RyC:   {ryc_path.name}")
 
