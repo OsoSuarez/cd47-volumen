@@ -1671,12 +1671,12 @@ $('#rxmDl').onclick=()=>{if(!rxmP)renderRxm();if(!rxmP)return;const c=rxmCarga(r
   toast(`${nf.format(c.n)} SKUs elegidos · ${nf.format(c.rows.length)} filas (${nf.format(c.ceros)} en 0/0)`)};
 // estrategia + DOI por SKU de la carga de hoy (dia 0): como se fijo el Max y cuantos dias de demanda cubre
 function rxmEstrategia(P){
-  const H=['SKU','Producto','Grupo','Pool','Tipo','Estrategia Max','Stock picking','Stock almacenamiento','Demanda hoy','Demanda prom/dia plan','DOI actual (dias)','Min V L','Max V L','Min carga','Max carga','DOI Min (dias)','DOI Max (dias)','Unidad (batch x empaque)'];
+  const H=['SKU','Min V L','Max V L','Min carga','Max carga','DOI actual (dias)','DOI Min (dias)','DOI Max (dias)','Demanda prom/dia plan','Estrategia Max'];
   const f1=x=>x==null||!isFinite(x)?'':(Math.round(x*10)/10).toString().replace('.',',');
   const q=x=>'"'+String(x==null?'':x).replace(/"/g,'""')+'"';
   const rows=P.lista[0].map(r=>{const it=r.it,nD=it.d.length,prom=nD?it.d.reduce((a,v)=>a+v,0)/nD:0,mn=Math.round(rxmMin(r)),mx=Math.round(it.max);
     const est=it.sinMM?'Sin Min/Max en V L: Max = cobertura de 1 a 3 dias de demanda (minimo 2 unidades de empaque)':(it.max>it.maxV?'Demanda del dia mayor al Max V L (o Max <= Min): Max subido':'Max de la V L');
-    return [it.s,q(it.name),q(it.grp),it.pool,r.tipo,q(est),f1(r.sIni),f1(+(ALM[String(it.s)]||0)),f1(r.dd),f1(prom),f1(prom>0?r.sIni/prom:null),it.sinMM?'':f1(it.min),it.sinMM?'':f1(it.maxV),mn,mx,f1(prom>0?mn/prom:null),f1(prom>0?mx/prom:null),Math.round(it.unit)].join(';')});
+    return [it.s,it.sinMM?'':f1(it.min),it.sinMM?'':f1(it.maxV),mn,mx,f1(prom>0?r.sIni/prom:null),f1(prom>0?mn/prom:null),f1(prom>0?mx/prom:null),f1(prom),q(est)].join(';')});
   return [H.join(';')].concat(rows).join('\n');
 }
 $('#rxmDoi').onclick=()=>{if(!rxmP)renderRxm();if(!rxmP)return;const s=rxmEstrategia(rxmP);
