@@ -572,6 +572,7 @@ table.cmp td.hi{color:var(--yellow2)}
   <div class="note" style="margin-bottom:10px">Se eligen los SKUs que llevan Min/Max (el resto va en 0/0). <b>Obligatorios:</b> stock de picking menor a la demanda del día y con mercadería en almacenamiento. <b>Adelantos:</b> con la capacidad que sobra (incluida la tolerancia), los SKUs de los próximos días que más reabastos evitan. Obligatorios y adelantos llenan hasta capacidad + tolerancia.</div>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
     <label>Tolerancia sobre capacidad <input id="rxmTol" type="number" min="0" max="50" step="1" value="10" style="width:60px"> %</label>
+    <label title="El Max cubre este nro. de días de demanda, siempre dentro de lo que entra en la ubicación (techo físico). Frío usa sus días fijos.">Cobertura del Max <input id="rxmCob" type="number" min="0" max="14" step="0.5" value="3" style="width:60px"> días</label>
     <span id="rxmDias" style="display:flex;gap:6px;flex-wrap:wrap"></span>
   </div>
   <div id="rxmKpis" class="kpis" style="margin-bottom:10px"></div>
@@ -1551,6 +1552,8 @@ function simRunRXX(C,ov){
 // Cada dia: 1) obligatorios (stock de picking < demanda y con stock en almacenamiento),
 // hasta capacidad + tolerancia; 2) adelantos con lo que sobra de la capacidad, ordenados por
 // reabastos futuros evitados. El resto de la V L queda en 0/0.
+function rxmCobDias(){const e=document.getElementById('rxmCob');const v=e?parseFloat(e.value):NaN;return isNaN(v)||v<0?3:v}
+function rxmTecho(s,v){const u=UBIC[String(s)];if(!u||!(u[1]>0)||!(u[2]>0)||!(u[0]>0)||!(v>0))return null;return Math.floor(u[0]*(u[1]/u[2])*0.85/Math.min(Math.max(v,1),1e5))}
 function rxmTolPct(){const e=document.getElementById('rxmTol');const v=e?parseFloat(e.value):NaN;return isNaN(v)||v<0?10:v}
 // turno de reabasto 22:00-06:00 (hora Buenos Aires): el dia 0 solo tiene la capacidad que queda del turno
 function shiftFrac(){
@@ -1578,8 +1581,15 @@ function planRXM(C){
     else if(d[0]>mxS)mxS=cb(d[0]);
     if(!sinMM&&info.max<=mnV)mxS=Math.max(mxS,cb(d[0]+(nD>1?d[1]:0)),mnV+unit);
     mxS=Math.max(mxS,2*unit,cb(2*empV)+unit);// Min de 2 bultos (UxB de la V L) y Max por encima
+    // Max por cobertura: varios dias de demanda, sin pasar lo que entra en la ubicacion (techo fisico, 85%)
+    let cobUp=false;
+    {const gk=String(info.grp||'').toUpperCase();let dias=rxmCobDias();if(pool==='frio'){const f=DOI_FRIO[gk];dias=f!=null?Math.min(dias,f):Math.min(dias,2)}
+     if(dias>0){let tg=0,rem=dias;const mean=nD?d.reduce((a,v)=>a+v,0)/nD:0;for(let k=0;rem>1e-9;k++){const x=k<nD?d[k]:mean;tg+=x*Math.min(1,rem);rem-=1;if(k>40)break}
+       const techo=rxmTecho(s,info.vol);const tU=techo!=null?Math.floor(techo/unit)*unit:null;
+       let mxT=cb(tg);if(tU!=null)mxT=Math.min(mxT,tU);
+       if(tU!=null&&mxT>mxS){mxS=mxT;cobUp=true}}}
     mxS=cb(mxS);
-    items.push({s,name:sk.name||info.name||'',grp:info.grp||'',pool,temp,d,min:mnV,max:mxS,maxV:sinMM?0:info.max,sinMM,batch,emp:empV,unit,S:+(STK[String(s)]||0),A:+(ALM[String(s)]||0)});
+    items.push({s,name:sk.name||info.name||'',grp:info.grp||'',pool,temp,d,cobUp,min:mnV,max:mxS,maxV:sinMM?0:info.max,sinMM,batch,emp:empV,unit,S:+(STK[String(s)]||0),A:+(ALM[String(s)]||0)});
   }
   const capT={secos:C.capS,frio:C.capF},capH={secos:Math.floor(C.capS*(1+tol)+1e-9),frio:Math.floor(C.capF*(1+tol)+1e-9)};
   const fr=shiftFrac(),capAt=(j,p)=>j===0?Math.floor(capT[p]*fr+1e-9):capT[p],capHAt=(j,p)=>j===0?Math.floor(capT[p]*fr*(1+tol)+1e-9):capH[p];
@@ -1663,6 +1673,8 @@ function renderRxm(){
 }
 $('#rxmF').onchange=()=>renderRxm();
 $('#rxmTol').onchange=()=>{try{localStorage.setItem('cd47_rxmtol',String(rxmTolPct()))}catch(e){}renderRxm();try{renderSim()}catch(e){}};
+$('#rxmCob').onchange=()=>{try{localStorage.setItem('cd47_rxmcob',String(rxmCobDias()))}catch(e){}renderRxm();try{renderSim()}catch(e){}};
+try{const v=localStorage.getItem('cd47_rxmcob');if(v!=null)$('#rxmCob').value=v}catch(e){}
 try{const v=localStorage.getItem('cd47_rxmtol');if(v!=null)$('#rxmTol').value=v}catch(e){}
 function rxmCsv(c){return [c.H.join(',')].concat(c.rows.map(r=>r.join(','))).join('\n')}
 $('#rxmDl').onclick=()=>{if(!rxmP)renderRxm();if(!rxmP)return;const c=rxmCarga(rxmP);
@@ -1675,7 +1687,7 @@ function rxmEstrategia(P){
   const f1=x=>x==null||!isFinite(x)?'':(Math.round(x*10)/10).toString().replace('.',',');
   const q=x=>'"'+String(x==null?'':x).replace(/"/g,'""')+'"';
   const rows=P.lista[0].map(r=>{const it=r.it,nD=it.d.length,prom=nD?it.d.reduce((a,v)=>a+v,0)/nD:0,mn=Math.round(rxmMin(r)),mx=Math.round(it.max);
-    const est=it.sinMM?'Sin Min/Max en V L: Max = cobertura de 1 a 3 dias de demanda (minimo 2 unidades de empaque)':(it.max>it.maxV?'Demanda del dia mayor al Max V L (o Max <= Min): Max subido':'Max de la V L');
+    const est=it.cobUp?'Max ampliado a '+f1(rxmCobDias())+' dias de demanda, dentro del techo fisico de la ubicacion':it.sinMM?'Sin Min/Max en V L: Max = cobertura de 1 a 3 dias de demanda (minimo 2 unidades de empaque)':(it.max>it.maxV?'Demanda del dia mayor al Max V L (o Max <= Min): Max subido':'Max de la V L');
     return [it.s,it.sinMM?'':f1(it.min),it.sinMM?'':f1(it.maxV),mn,mx,f1(prom>0?r.sIni/prom:null),f1(prom>0?mn/prom:null),f1(prom>0?mx/prom:null),f1(prom),q(est)].join(';')});
   return [H.join(';')].concat(rows).join('\n');
 }
