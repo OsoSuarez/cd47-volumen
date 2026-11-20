@@ -569,7 +569,7 @@ table.cmp td.hi{color:var(--yellow2)}
 <div class="wrap" id="t8" style="display:none">
 <div class="panel" style="padding:16px">
   <h2 style="margin:0 0 6px;font-size:18px">Carga RXM · lista inteligente de Min/Max</h2>
-  <div class="note" style="margin-bottom:10px">Se eligen los SKUs que llevan Min/Max (el resto va en 0/0). <b>Obligatorios:</b> stock de picking menor a la demanda del día y con mercadería en almacenamiento. <b>Adelantos:</b> con la capacidad que sobra, los SKUs que más reabastos futuros evitan. Los adelantos llenan hasta la capacidad; los obligatorios pueden usar la tolerancia extra.</div>
+  <div class="note" style="margin-bottom:10px">Se eligen los SKUs que llevan Min/Max (el resto va en 0/0). <b>Obligatorios:</b> stock de picking menor a la demanda del día y con mercadería en almacenamiento. <b>Adelantos:</b> con la capacidad que sobra (incluida la tolerancia), los SKUs de los próximos días que más reabastos evitan. Obligatorios y adelantos llenan hasta capacidad + tolerancia.</div>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
     <label>Tolerancia sobre capacidad <input id="rxmTol" type="number" min="0" max="50" step="1" value="10" style="width:60px"> %</label>
     <span id="rxmDias" style="display:flex;gap:6px;flex-wrap:wrap"></span>
@@ -1595,7 +1595,7 @@ function planRXM(C){
         if(used>=capHAt(j,p)){over++;continue}
         const q=fill(it);if(q<=0)continue;
         L.push({it,q,tipo:'Obligatorio',sIni:it.S,dd:it.d[j]});it.S+=q;it.A-=q;used++;nObl++;done.add(it.s)}
-      if(used<capAt(j,p)){
+      if(used<capHAt(j,p)){
         const cand=[];
         for(const it of P){
           if(done.has(it.s)||it.A<=0||it.S>=it.max)continue;
@@ -1609,7 +1609,7 @@ function planRXM(C){
         }
         cand.sort((a,b)=>b.ahorro-a.ahorro||a.cover-b.cover);
         for(const c of cand){
-          if(used>=capAt(j,p))break;const it=c.it,q=fill(it);if(q<=0)continue;
+          if(used>=capHAt(j,p))break;const it=c.it,q=fill(it);if(q<=0)continue;
           L.push({it,q,tipo:'Adelanto',sIni:it.S,dd:it.d[j]});it.S+=q;it.A-=q;used++;nAd++}
       }
       day[p]={req:used+over,ej:used,pend:over,cap:capAt(j,p),obl:nObl,adel:nAd,over};
