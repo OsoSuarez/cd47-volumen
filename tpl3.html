@@ -1577,7 +1577,7 @@ function planRXM(C){
     if(sinMM)mxS=cb(Math.max(d[0],d[0]+(nD>1?d[1]:0)+(nD>2?d[2]:0)));
     else if(d[0]>mxS)mxS=cb(d[0]);
     if(!sinMM&&info.max<=mnV)mxS=Math.max(mxS,cb(d[0]+(nD>1?d[1]:0)),mnV+unit);
-    mxS=Math.max(mxS,2*unit);
+    mxS=Math.max(mxS,2*unit,cb(2*empV)+unit);// Min de 2 bultos (UxB de la V L) y Max por encima
     mxS=cb(mxS);
     items.push({s,name:sk.name||info.name||'',grp:info.grp||'',pool,temp,d,min:mnV,max:mxS,maxV:sinMM?0:info.max,sinMM,batch,emp:empV,unit,S:+(STK[String(s)]||0),A:+(ALM[String(s)]||0)});
   }
@@ -1620,7 +1620,7 @@ function planRXM(C){
   return {D,out,lista,dayTot,items,cap:capT,capH,tol,fr,capAt,capHAt};
 }
 // Min sugerido: por encima del stock para que dispare, multiplo del batch y menor al Max
-function rxmMin(r){const b=r.it.unit||r.it.batch||1,nm=r.it.max;let mn=Math.ceil((Math.max(r.it.sinMM?0:r.it.min,Math.floor(r.sIni)+1))/b-1e-9)*b;if(mn>=nm)mn=Math.max(b,nm-b);return mn}
+function rxmMin(r){const b=r.it.unit||r.it.batch||1,nm=r.it.max;let mn=Math.ceil((Math.max(r.it.sinMM?0:r.it.min,Math.floor(r.sIni)+1,2*(r.it.emp||1)))/b-1e-9)*b;if(mn>=nm)mn=Math.max(b,nm-b);return mn}
 // archivo de carga del dia 0: elegidos con su Min/Max (Min por encima del stock para que dispare), el resto en 0/0
 function rxmCarga(P){
   const sel=new Map();for(const r of P.lista[0])sel.set(r.it.s,r);
