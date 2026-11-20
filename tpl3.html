@@ -576,7 +576,7 @@ table.cmp td.hi{color:var(--yellow2)}
   </div>
   <div id="rxmKpis" class="kpis" style="margin-bottom:10px"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-    <select id="rxmF"><option value="all">Todos los SKUs de la lista</option><option value="up">Solo con Min/Max sugerido (↑)</option><option value="sin">Solo sin Min/Max</option></select> <button id="rxmDl" class="y">Descargar carga de hoy (CSV)</button><button id="rxmCopy">Copiar carga de hoy</button>
+    <select id="rxmF"><option value="all">Todos los SKUs de la lista</option><option value="up">Solo con Min/Max sugerido (↑)</option><option value="sin">Solo sin Min/Max</option></select> <button id="rxmDl" class="y">Descargar carga de hoy (CSV)</button><button id="rxmCopy">Copiar carga de hoy</button><button id="rxmDoi">Descargar estrategia + DOI (CSV)</button>
   </div>
   <div id="rxmSem" class="tbl" style="margin-bottom:12px"></div>
   <div id="rxmNote" class="note" style="margin-bottom:8px"></div>
@@ -1669,6 +1669,20 @@ $('#rxmDl').onclick=()=>{if(!rxmP)renderRxm();if(!rxmP)return;const c=rxmCarga(r
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rxmCsv(c)],{type:'text/csv;charset=utf-8'}));
   a.download=`CARGA_MINMAX_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(a.href);
   toast(`${nf.format(c.n)} SKUs elegidos · ${nf.format(c.rows.length)} filas (${nf.format(c.ceros)} en 0/0)`)};
+// estrategia + DOI por SKU de la carga de hoy (dia 0): como se fijo el Max y cuantos dias de demanda cubre
+function rxmEstrategia(P){
+  const H=['SKU','Producto','Grupo','Pool','Tipo','Estrategia Max','Stock picking','Stock almacenamiento','Demanda hoy','Demanda prom/dia plan','DOI actual (dias)','Min V L','Max V L','Min carga','Max carga','DOI Min (dias)','DOI Max (dias)','Unidad (batch x empaque)'];
+  const f1=x=>x==null||!isFinite(x)?'':(Math.round(x*10)/10).toString().replace('.',',');
+  const q=x=>'"'+String(x==null?'':x).replace(/"/g,'""')+'"';
+  const rows=P.lista[0].map(r=>{const it=r.it,nD=it.d.length,prom=nD?it.d.reduce((a,v)=>a+v,0)/nD:0,mn=Math.round(rxmMin(r)),mx=Math.round(it.max);
+    const est=it.sinMM?'Sin Min/Max en V L: Max = cobertura de 1 a 3 dias de demanda (minimo 2 unidades de empaque)':(it.max>it.maxV?'Demanda del dia mayor al Max V L (o Max <= Min): Max subido':'Max de la V L');
+    return [it.s,q(it.name),q(it.grp),it.pool,r.tipo,q(est),f1(r.sIni),f1(+(ALM[String(it.s)]||0)),f1(r.dd),f1(prom),f1(prom>0?r.sIni/prom:null),it.sinMM?'':f1(it.min),it.sinMM?'':f1(it.maxV),mn,mx,f1(prom>0?mn/prom:null),f1(prom>0?mx/prom:null),Math.round(it.unit)].join(';')});
+  return [H.join(';')].concat(rows).join('\n');
+}
+$('#rxmDoi').onclick=()=>{if(!rxmP)renderRxm();if(!rxmP)return;const s=rxmEstrategia(rxmP);
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+s],{type:'text/csv;charset=utf-8'}));
+  a.download=`ESTRATEGIA_DOI_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(a.href);
+  toast(`Estrategia + DOI · ${nf.format(rxmP.lista[0].length)} SKUs`)};
 $('#rxmCopy').onclick=()=>{if(!rxmP)renderRxm();if(!rxmP)return;const c=rxmCarga(rxmP);
   copy([c.H.join('\t')].concat(c.rows.map(r=>r.join('\t'))).join('\n'),`${nf.format(c.n)} SKUs elegidos · ${nf.format(c.rows.length)} filas`)};
 
