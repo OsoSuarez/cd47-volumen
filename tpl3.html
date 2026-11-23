@@ -574,6 +574,7 @@ table.cmp td.hi{color:var(--yellow2)}
     <label>Tolerancia sobre capacidad <input id="rxmTol" type="number" min="0" max="50" step="1" value="10" style="width:60px"> %</label>
     <label title="El Max cubre este nro. de días de demanda, siempre dentro de lo que entra en la ubicación (techo físico). Frío usa sus días fijos.">Cobertura del Max <input id="rxmCob" type="number" min="0" max="14" step="0.5" value="3" style="width:60px"> días</label>
     <span id="rxmDias" style="display:flex;gap:6px;flex-wrap:wrap"></span>
+    <label title="Reporte Resurtido Picking WMS (Excel). Reemplaza la demanda y el stock de HOY por los reales del WMS; mañana en adelante sigue el plan.">Demanda real de hoy (Resurtido WMS) <input id="rxmWms" type="file" accept=".xlsx,.xls"></label><span id="rxmWmsSt" class="note"></span>
   </div>
   <div id="rxmKpis" class="kpis" style="margin-bottom:10px"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
@@ -1552,6 +1553,24 @@ function simRunRXX(C,ov){
 // Cada dia: 1) obligatorios (stock de picking < demanda y con stock en almacenamiento),
 // hasta capacidad + tolerancia; 2) adelantos con lo que sobra de la capacidad, ordenados por
 // reabastos futuros evitados. El resto de la V L queda en 0/0.
+let RXW=null;
+// Reporte Resurtido Picking WMS: demanda y stock reales de hoy por SKU. Los SKUs que no figuran no necesitan reabasto hoy.
+async function rxmLoadWms(file){
+  const st=document.getElementById('rxmWmsSt');
+  if(!file){RXW=null;st.textContent='';renderRxm();return}
+  try{
+    await loadSheetJS();
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+    const m=new Map();let dem=0;
+    for(const r of rows){const s=parseInt(r['Codigo'],10);if(!s)continue;
+      const d=+r['Demanda']||0,pk=+r['Cant Zona Picking']||0,al=+r['Cant Zona Almacenamiento']||0;
+      m.set(s,{dem:d,pick:pk,alm:al});dem+=d}
+    if(!m.size)throw new Error('No encontré filas con Codigo/Demanda');
+    RXW=m;st.textContent=` ${nf.format(m.size)} SKUs · ${nf.format(dem)} u de demanda real`;
+  }catch(e){RXW=null;st.textContent=' ⚠ '+e.message}
+  renderRxm();
+}
 function rxmCobDias(){const e=document.getElementById('rxmCob');const v=e?parseFloat(e.value):NaN;return isNaN(v)||v<0?3:v}
 function rxmTecho(s,v){const u=UBIC[String(s)];if(!u||!(u[1]>0)||!(u[2]>0)||!(u[0]>0)||!(v>0))return null;return Math.floor(u[0]*(u[1]/u[2])*0.85/Math.min(Math.max(v,1),1e5))}
 function rxmTolPct(){const e=document.getElementById('rxmTol');const v=e?parseFloat(e.value):NaN;return isNaN(v)||v<0?10:v}
@@ -1567,12 +1586,14 @@ function planRXM(C){
   for(let i=0;i<agg.M.q.length;i++){const s=agg.M.s[i];let r=raw.get(s);if(!r){r=new Float64Array(nDA);raw.set(s,r)}r[agg.M.d[i]]+=agg.M.q[i]}
   const poolOf=t=>t==='Ambiente'?'secos':(t==='Refrigerado'||t==='Congelado')?'frio':t==='Fruver'?(C.fr==='frio'?'frio':'secos'):null;
   const tol=rxmTolPct()/100,items=[];
-  for(const [s,r0] of raw){
+  const rawK=new Map(raw);if(RXW)for(const s of RXW.keys())if(!rawK.has(s))rawK.set(s,new Float64Array(nDA));
+  for(const [s,r0] of rawK){
     const info0=mm.map.get(s),sinMM=!info0||!(info0.max>0),info=info0||{grp:'',min:NaN,max:NaN,emp:NaN,name:''};
-    const sk=skus.get(s)||{};const temp=sk.temp||'Sin dato';const pool=poolOf(temp);if(!pool)continue;
+    const sk=skus.get(s)||{};const wR=RXW?RXW.get(s):null;let temp=sk.temp||'Sin dato';if(temp==='Sin dato'&&wR){const ar=((GROUPS[String(info0?info0.grp:'').toUpperCase()]||{}).area)||'';temp=ar==='REFRIGERADOS'?'Refrigerado':ar==='CONGELADOS'?'Congelado':'Ambiente'}const pool=poolOf(temp);if(!pool)continue;
     const present=[];for(let j=0;j<nDA;j++)if(agg.dT[j].has(temp))present.push(j);
     const avg=present.length?present.reduce((a,j)=>a+r0[j],0)/present.length:0;
     const df=new Float64Array(nDA);for(let j=j0;j<nDA;j++)df[j]=(agg.dT[j].has(temp)?r0[j]:avg)*Math.pow(1+C.g,j-j0);const d=df.subarray(j0);
+    if(RXW&&D[0]===hoyD)d[0]=wR?wR.dem:0;// demanda real de hoy (WMS); los que no figuran no necesitan reabasto
     const batch=(sk.batch>0)?sk.batch:(info.emp>0?info.emp:1);
     const gcd=(a,b)=>b?gcd(b,a%b):a,empV=+info.emp>0?Math.round(+info.emp):1,bR=Math.max(1,Math.round(batch)||1),unit=bR*empV/gcd(bR,empV);
     const cb=x=>Math.ceil(x/unit-1e-9)*unit,mnV=isNaN(info.min)?0:info.min;
@@ -1589,7 +1610,7 @@ function planRXM(C){
        let mxT=cb(tg);if(tU!=null)mxT=Math.min(mxT,tU);
        if(tU!=null&&mxT>mxS){mxS=mxT;cobUp=true}}}
     mxS=cb(mxS);
-    items.push({s,name:sk.name||info.name||'',grp:info.grp||'',pool,temp,d,cobUp,min:mnV,max:mxS,maxV:sinMM?0:info.max,sinMM,batch,emp:empV,unit,S:+(STK[String(s)]||0),A:+(ALM[String(s)]||0)});
+    items.push({s,name:sk.name||info.name||'',grp:info.grp||'',pool,temp,d,cobUp,min:mnV,max:mxS,maxV:sinMM?0:info.max,sinMM,batch,emp:empV,unit,S:(wR&&D[0]===hoyD)?wR.pick:+(STK[String(s)]||0),A:(wR&&D[0]===hoyD)?wR.alm:+(ALM[String(s)]||0)});
   }
   const capT={secos:C.capS,frio:C.capF},capH={secos:Math.floor(C.capS*(1+tol)+1e-9),frio:Math.floor(C.capF*(1+tol)+1e-9)};
   const fr=shiftFrac(),capAt=(j,p)=>j===0?Math.floor(capT[p]*fr+1e-9):capT[p],capHAt=(j,p)=>j===0?Math.floor(capT[p]*fr*(1+tol)+1e-9):capH[p];
@@ -1673,6 +1694,7 @@ function renderRxm(){
 }
 $('#rxmF').onchange=()=>renderRxm();
 $('#rxmTol').onchange=()=>{try{localStorage.setItem('cd47_rxmtol',String(rxmTolPct()))}catch(e){}renderRxm();try{renderSim()}catch(e){}};
+$('#rxmWms').onchange=e=>rxmLoadWms(e.target.files[0]);
 $('#rxmCob').onchange=()=>{try{localStorage.setItem('cd47_rxmcob',String(rxmCobDias()))}catch(e){}renderRxm();try{renderSim()}catch(e){}};
 try{const v=localStorage.getItem('cd47_rxmcob');if(v!=null)$('#rxmCob').value=v}catch(e){}
 try{const v=localStorage.getItem('cd47_rxmtol');if(v!=null)$('#rxmTol').value=v}catch(e){}
