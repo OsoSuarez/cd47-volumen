@@ -79,9 +79,11 @@ def main():
     fa = datetime.strptime(ult[0], "%Y_%m_%d_%H_%M_%S")
     fb = datetime.strptime(ult[1], "%Y_%m_%d_%H_%M_%S")
     dif_min = (fb - fa).total_seconds() / 60
-    if dif_min > 30:
-        sys.exit(f"ERROR: los 2 planes mas nuevos son de corridas distintas ({ult[0]} y {ult[1]}, {dif_min:.0f} min de diferencia). "
+    if fa.date() != fb.date():
+        sys.exit(f"ERROR: los 2 planes mas nuevos son de dias distintos ({ult[0]} y {ult[1]}). "
                  f"Falto descargar uno de los dos planes de hoy. Revisar run_planes.py / Fountain9 y volver a bajar.")
+    if dif_min > 180:
+        print(f"AVISO: los 2 planes se crearon con {dif_min:.0f} min de diferencia.")
     secos_path, ryc_path = (a, b) if a.stat().st_size >= b.stat().st_size else (b, a)
     print(f"Secos: {secos_path.name}")
     print(f"RyC:   {ryc_path.name}")
