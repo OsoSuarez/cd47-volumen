@@ -235,7 +235,8 @@ def create_plan(page, preset, texto_opcion):
     print(f"Preset seleccionado: {preset}")
 
     # Fecha de simulación: hoy + 7 días (en la grabación, el 12 estando a 5 de noviembre).
-    dia = (date.today() + timedelta(days=7)).day
+    objetivo = date.today() + timedelta(days=7)
+    dia = objetivo.day
     # Expandimos Future Order Planning solo si los switches todavía no están a la vista
     # (puede haber quedado abierto del plan anterior).
     print("  paso: expandir Future Order Planning")
@@ -264,10 +265,30 @@ def create_plan(page, preset, texto_opcion):
     page.get_by_role("textbox", name="Select date").click(timeout=20_000)
     page.wait_for_timeout(1000)
     # Acotado al calendario: un get_by_text suelto matchea cualquier numero de la pagina.
-    calendario = page.locator(".ant-calendar-date, .ant-picker-cell-inner")
-    calendario.filter(has_text=re.compile(rf"^{dia}$")).first.click(timeout=20_000)
+    # Ojo: cuando hoy+7 cae en el mes siguiente (ej. 24/11 -> 1/12), el numero "1" aparece dos veces
+    # (1 de noviembre deshabilitado y 1 de diciembre). Se elige por fecha completa (atributo title).
+    celda = page.locator(f'td[title="{objetivo.isoformat()}"]')
+    for _ in range(3):
+        if celda.count():
+            break
+        print("  fecha objetivo fuera de vista, paso al mes siguiente")
+        page.locator(".ant-picker-header-next-btn, .ant-calendar-next-month-btn").first.click(timeout=20_000)
+        page.wait_for_timeout(700)
+    if celda.count():
+        celda.first.click(timeout=20_000)
+    else:
+        # Respaldo por numero: solo celdas habilitadas; si el objetivo es de otro mes, la celda fuera del mes visible.
+        calendario = page.locator("td.ant-picker-cell:not(.ant-picker-cell-disabled)")
+        mismo_mes = objetivo.month == date.today().month
+        celdas = calendario.filter(has_text=re.compile(rf"^{dia}$"))
+        sel = celdas.filter(has=page.locator(".ant-picker-cell-inner"))
+        cand = [c for c in range(sel.count())
+                if ("ant-picker-cell-in-view" in (sel.nth(c).get_attribute("class") or "")) == mismo_mes]
+        if not cand:
+            raise RuntimeError(f"No encontre la fecha {objetivo.isoformat()} en el calendario")
+        sel.nth(cand[0]).click(timeout=20_000)
     page.wait_for_timeout(1000)
-    print(f"Fecha de simulación: día {dia}")
+    print(f"Fecha de simulación: {objetivo.isoformat()}")
 
     print("  paso: Create Plan")
     page.get_by_role("button", name="Create Plan").click(timeout=20_000)
