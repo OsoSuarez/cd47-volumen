@@ -578,7 +578,7 @@ table.cmp td.hi{color:var(--yellow2)}
   </div>
   <div id="rxmKpis" class="kpis" style="margin-bottom:10px"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-    <select id="rxmF"><option value="all">Todos los SKUs de la lista</option><option value="up">Solo con Min/Max sugerido (↑)</option><option value="sin">Solo sin Min/Max</option></select> <button id="rxmDl" class="y">Descargar carga de hoy (CSV)</button><button id="rxmCopy">Copiar carga de hoy</button><button id="rxmDoi">Descargar estrategia + DOI (CSV)</button>
+    <select id="rxmF"><option value="all">Todos los SKUs de la lista</option><option value="up">Solo con Min/Max sugerido (↑)</option><option value="sin">Solo sin Min/Max</option></select> <button id="rxmDl" class="y">Descargar carga de hoy (CSV)</button><button id="rxmCopy">Copiar carga de hoy</button><button id="rxmDoi">Descargar estrategia + DOI (CSV)</button><button id="rxmPend" title="Obligatorios que no entran ni con la tolerancia, ordenados por cobertura (los de menos stock primero)">Descargar obligatorios sin cubrir (CSV)</button>
   </div>
   <div id="rxmSem" class="tbl" style="margin-bottom:12px"></div>
   <div id="rxmNote" class="note" style="margin-bottom:8px"></div>
@@ -1616,14 +1616,14 @@ function planRXM(C){
   const fr=shiftFrac(),capAt=(j,p)=>j===0?Math.floor(capT[p]*fr+1e-9):capT[p],capHAt=(j,p)=>j===0?Math.floor(capT[p]*fr*(1+tol)+1e-9):capH[p];
   const fill=it=>{let q=Math.min(it.max-it.S,it.A);if(q<=0)return 0;const b=it.batch;if(q>=b)q=Math.floor(q/b+1e-9)*b;return Math.max(0,q)};
   const need=(S,Dh,mx)=>mx>0?Math.max(0,Math.ceil(Math.max(0,Dh-S)/mx-1e-9)):0;
-  const out=[],lista=[],dayTot=new Float64Array(nD);
+  const out=[],lista=[],dayTot=new Float64Array(nD),pendAll=[];
   for(let j=0;j<nD;j++){
-    const day={},L=[];
+    const day={},L=[];pendAll[j]=[];
     for(const p of ['secos','frio']){
       const P=items.filter(it=>it.pool===p),done=new Set();let used=0,over=0,nObl=0,nAd=0;
       const obl=P.filter(it=>it.d[j]>0&&it.S<it.d[j]&&it.A>0).sort((a,b)=>a.S/a.d[j]-b.S/b.d[j]);
       for(const it of obl){
-        if(used>=capHAt(j,p)){over++;continue}
+        if(used>=capHAt(j,p)){over++;pendAll[j].push({it,sIni:it.S,dd:it.d[j]});continue}
         const q=fill(it);if(q<=0)continue;
         L.push({it,q,tipo:'Obligatorio',sIni:it.S,dd:it.d[j]});it.S+=q;it.A-=q;used++;nObl++;done.add(it.s)}
       if(used<capHAt(j,p)){
@@ -1648,7 +1648,7 @@ function planRXM(C){
     for(const it of items){dayTot[j]+=it.d[j];it.S=Math.max(0,it.S-it.d[j])}
     out.push(day);lista.push(L);
   }
-  return {D,out,lista,dayTot,items,cap:capT,capH,tol,fr,capAt,capHAt};
+  return {D,out,lista,pendAll,dayTot,items,cap:capT,capH,tol,fr,capAt,capHAt};
 }
 // Min sugerido: por encima del stock para que dispare, multiplo del batch y menor al Max
 function rxmMin(r){const b=r.it.unit||r.it.batch||1,nm=r.it.max;let mn=Math.ceil((Math.max(r.it.sinMM?0:r.it.min,Math.floor(r.sIni)+1,2*(r.it.emp||1)))/b-1e-9)*b;if(mn>=nm)mn=Math.max(b,nm-b);return mn}
@@ -1694,6 +1694,13 @@ function renderRxm(){
 }
 $('#rxmF').onchange=()=>renderRxm();
 $('#rxmTol').onchange=()=>{try{localStorage.setItem('cd47_rxmtol',String(rxmTolPct()))}catch(e){}renderRxm();try{renderSim()}catch(e){}};
+$('#rxmPend').onclick=()=>{if(!rxmP)renderRxm();if(!rxmP)return;const j=rxmDia,L=(rxmP.pendAll[j]||[]).slice();
+  const f1=x=>x==null||!isFinite(x)?'':(Math.round(x*100)/100).toString().replace('.',','),q=x=>'"'+String(x==null?'':x).replace(/"/g,'""')+'"';
+  L.sort((a,b)=>a.sIni/(a.dd||1)-b.sIni/(b.dd||1));
+  const H=['SKU','Producto','Pool','Stock picking','Demanda del dia','Cobertura (dias)','Stock almacenamiento','Min V L','Max V L'];
+  const rows=L.map(r=>[r.it.s,q(r.it.name),r.it.pool,f1(r.sIni),f1(r.dd),f1(r.dd>0?r.sIni/r.dd:null),f1(+(ALM[String(r.it.s)]||0)),r.it.sinMM?'':f1(r.it.min),r.it.sinMM?'':f1(r.it.maxV)].join(';'));
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+[H.join(';')].concat(rows).join('\n')],{type:'text/csv;charset=utf-8'}));
+  a.download=`OBLIGATORIOS_SIN_CUBRIR_${rxmP.D[j]}.csv`;a.click();URL.revokeObjectURL(a.href);toast(`${nf.format(L.length)} obligatorios sin cubrir · ${fmtD(rxmP.D[j])}`)};
 $('#rxmWms').onchange=e=>rxmLoadWms(e.target.files[0]);
 $('#rxmCob').onchange=()=>{try{localStorage.setItem('cd47_rxmcob',String(rxmCobDias()))}catch(e){}renderRxm();try{renderSim()}catch(e){}};
 try{const v=localStorage.getItem('cd47_rxmcob');if(v!=null)$('#rxmCob').value=v}catch(e){}
