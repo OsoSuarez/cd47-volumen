@@ -360,10 +360,12 @@ def usar_archivos_locales():
     if len(hits) < 2:
         print("  No hay 2 archivos sin renombrar: uso los plan_*.csv que ya estan en descargas/")
         return
-    s, r = hits[-2], hits[-1]
+    # Los 2 mas nuevos; el MAS GRANDE es Secos y el mas chico RyC (igual que filtrar_csv.py).
+    a_, b_ = hits[-2], hits[-1]
+    s, r = (a_, b_) if a_.stat().st_size >= b_.stat().st_size else (b_, a_)
     for i, c in ((1, s), (2, r)):
         d = c.with_name(f"plan_{i}_{c.name}")
-        c.rename(d)
+        os.replace(c, d)  # pisa si ya existia de una corrida anterior (rename falla en Windows)
         print(f"  {'Secos' if i == 1 else 'RyC'}: {d.name} ({d.stat().st_size // 1_000_000} MB)")
 
 
