@@ -74,6 +74,14 @@ def main():
     if len(ult) < 2:
         sys.exit(f"ERROR: se esperaban 2 planes distintos en {OUT}/, se encontraron {len(ult)}")
     a, b = porplan[ult[0]], porplan[ult[1]]
+    # Los dos planes tienen que ser de la MISMA corrida (se crean con minutos de diferencia).
+    # Si no, uno es de una corrida anterior (ej. el de frio de ayer) y se mezclaria un plan viejo.
+    fa = datetime.strptime(ult[0], "%Y_%m_%d_%H_%M_%S")
+    fb = datetime.strptime(ult[1], "%Y_%m_%d_%H_%M_%S")
+    dif_min = (fb - fa).total_seconds() / 60
+    if dif_min > 30:
+        sys.exit(f"ERROR: los 2 planes mas nuevos son de corridas distintas ({ult[0]} y {ult[1]}, {dif_min:.0f} min de diferencia). "
+                 f"Falto descargar uno de los dos planes de hoy. Revisar run_planes.py / Fountain9 y volver a bajar.")
     secos_path, ryc_path = (a, b) if a.stat().st_size >= b.stat().st_size else (b, a)
     print(f"Secos: {secos_path.name}")
     print(f"RyC:   {ryc_path.name}")
