@@ -26,7 +26,24 @@ def leer_csv(path: pathlib.Path) -> pd.DataFrame:
     total = len(df)
     df = df[df[COL_FILTRO].fillna(0) != 0].copy()
     print(f"  {total:,} filas -> {len(df):,} con cantidad > 0 ({total - len(df):,} eliminadas)")
+    controlar(path.name, total, df)
     return df
+
+
+def controlar(nombre, total, df):
+    """Avisos de sanidad: el plan puede venir cortado o con pocos dias."""
+    if total % 1000 == 0 or len(df) % 1000 == 0:
+        print(f"  !! AVISO {nombre}: cantidad de filas redonda ({total:,} / {len(df):,}). "
+              f"Probable corte en la descarga de Fountain9: revisar que el plan este completo.")
+    col = next((c for c in df.columns if c.strip().lower() == "final order date"), None)
+    if col:
+        dias = sorted(pd.to_datetime(df[col], errors="coerce").dropna().dt.date.unique())
+        print(f"  dias en el plan: {len(dias)} ({dias[0]} -> {dias[-1]})" if dias else "  sin fechas")
+        if len(dias) < 5:
+            print(f"  !! AVISO {nombre}: solo {len(dias)} dias de plan (se esperan ~7).")
+        for i in range(1, len(dias)):
+            if (dias[i] - dias[i - 1]).days > 1:
+                print(f"  !! AVISO {nombre}: salto de fechas {dias[i-1]} -> {dias[i]}")
 
 
 def guardar_csv_filtrado(df: pd.DataFrame, nombre: str):
